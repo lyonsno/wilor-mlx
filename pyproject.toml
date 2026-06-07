@@ -5,13 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wilor-mlx"
 version = "0.1.0"
-description = "WiLoR hand pose estimation on Apple Silicon via MLX — 4x faster than PyTorch MPS"
+description = "WiLoR hand pose estimation for Apple Silicon, rebuilt end-to-end in MLX"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "mlx>=0.22.0",
     "numpy",
+    "scipy",
+    "huggingface_hub",
 ]
 
 [project.optional-dependencies]

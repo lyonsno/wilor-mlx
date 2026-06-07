@@ -98,13 +98,13 @@ from wilor_mlx import WiLoR
 import mlx.core as mx
 import numpy as np
 
-# Option A: Load from pre-converted weights (no torch needed)
-model = WiLoR.from_pretrained(
-    "weights/wilor-mlx.safetensors",
-    mano_path="MANO_RIGHT.pkl",  # from mano.is.tue.mpg.de
-)
+# Load model — weights auto-download from HuggingFace on first run
+model = WiLoR.from_pretrained(mano_path="MANO_RIGHT.pkl")  # from mano.is.tue.mpg.de
 
-# Option B: Load from PyTorch checkpoint (requires torch)
+# Or with explicit weights path:
+# model = WiLoR.from_pretrained(mano_path="MANO_RIGHT.pkl", weights_path="weights/wilor-mlx.safetensors")
+
+# Or from PyTorch checkpoint (requires torch):
 # model = WiLoR.from_pytorch_checkpoint(
 #     "pretrained_models/wilor_final.ckpt",
 #     "pretrained_models/MANO_RIGHT.pkl",
