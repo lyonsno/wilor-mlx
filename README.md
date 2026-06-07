@@ -47,14 +47,30 @@ Requires macOS with Apple Silicon, Python 3.10+. MLX is installed automatically.
 
 ## Getting the model weights
 
-There are two options:
+### Option A: Download pre-converted weights (recommended)
 
-### Option A: Pre-converted weights (recommended, no torch needed)
+Pre-converted weights are on HuggingFace — **no PyTorch needed:**
 
-Convert the weights once, then load without any PyTorch dependency:
+| Variant | Size | Download |
+|---|---|---|
+| **float32** (recommended) | 2.4 GB | [wilor-mlx.safetensors](https://huggingface.co/lyonsno/wilor-mlx/resolve/main/wilor-mlx.safetensors) |
+| **int4** (5x smaller) | 490 MB | [wilor-mlx-int4.safetensors](https://huggingface.co/lyonsno/wilor-mlx/resolve/main/wilor-mlx-int4.safetensors) |
 
 ```bash
-# One-time conversion (requires torch)
+# Download with hf CLI
+hf download lyonsno/wilor-mlx wilor-mlx.safetensors --local-dir weights/
+
+# Or int4 for faster download
+hf download lyonsno/wilor-mlx wilor-mlx-int4.safetensors --local-dir weights/
+```
+
+Both variants run at the same speed on Apple Silicon (~36ms). Int4 has slightly lower precision (< 2mm vs < 1mm on hand keypoints). See [model card](https://huggingface.co/lyonsno/wilor-mlx) for full benchmarks.
+
+### Option B: Convert from PyTorch checkpoint yourself
+
+If you have the original [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) pretrained models:
+
+```bash
 pip install torch
 python -m wilor_mlx.convert \
     pretrained_models/wilor_final.ckpt \
@@ -63,19 +79,7 @@ python -m wilor_mlx.convert \
     weights/wilor-mlx.safetensors
 ```
 
-### Option B: Load from PyTorch checkpoint directly
-
-If you already have the WiLoR-mini pretrained models, you can load them directly (requires `torch`).
-
-### Getting the original WiLoR-mini files
-
-Both options need the original model files. Clone [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and follow its setup instructions. You need:
-
-1. **`wilor_final.ckpt`** — the WiLoR model checkpoint
-2. **`MANO_RIGHT.pkl`** — the MANO hand model (requires registration at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/))
-3. **`mano_mean_params.npz`** — mean MANO parameters
-
-The `detector.pt` file from WiLoR-mini is not needed by wilor-mlx.
+The original WiLoR-mini files (`wilor_final.ckpt`, `MANO_RIGHT.pkl`, `mano_mean_params.npz`) can be obtained by cloning [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and following its setup instructions. The MANO model requires registration at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/). The `detector.pt` file is not needed by wilor-mlx.
 
 ## Quick start
 
