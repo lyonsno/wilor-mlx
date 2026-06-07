@@ -16,6 +16,11 @@ def rotmat_to_rotvec(rotmat):
     """Convert rotation matrices to axis-angle (Rodrigues) vectors.
     Simplified version of roma.rotmat_to_rotvec.
 
+    Limitation: inaccurate near angle=pi (180°) where both sin(angle)
+    and the skew-symmetric part approach zero. Roma avoids this via
+    quaternion intermediates. For WiLoR hand pose output, joint angles
+    are well below 180° so this does not affect inference quality.
+
     Args:
         rotmat: (..., 3, 3) rotation matrices
     Returns:

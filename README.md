@@ -105,12 +105,12 @@ Compared against PyTorch WiLoR-mini on identical inputs (float32):
 
 | Output | Max abs diff | Notes |
 |---|---|---|
-| pred_vertices (778×3) | 0.024 | < 1mm — within visual tolerance |
-| pred_keypoints_3d (21×3) | 0.024 | < 1mm |
-| hand_pose (15×3) | 0.13 | Axis-angle is sensitive near gimbal lock |
-| betas (10) | 0.23 | Accumulates through 32 transformer layers |
+| pred_vertices (778×3) | 0.006 | Sub-millimeter |
+| pred_keypoints_3d (21×3) | 0.006 | Sub-millimeter |
+| hand_pose (15×3) | 0.06 | Axis-angle is sensitive near gimbal lock |
+| betas (10) | 0.10 | Accumulates through 32 transformer layers |
 
-The geometric outputs that matter for hand tracking (vertices, keypoints) match within ~1mm.
+The geometric outputs that matter for hand tracking (vertices, keypoints) match within sub-millimeter precision.
 
 ## Architecture
 
