@@ -150,13 +150,18 @@ def load_pytorch_checkpoint(model, ckpt_path, mano_model_path, mano_mean_path):
 
 
 def _collect_arrays(obj, prefix=""):
-    """Recursively collect all mx.array attributes."""
+    """Recursively collect all mx.array attributes, including nn.Module params."""
+    import mlx.nn as nn
     arrays = []
     if isinstance(obj, mx.array):
         return [obj]
     if isinstance(obj, (list, tuple)):
         for item in obj:
             arrays.extend(_collect_arrays(item))
+    elif isinstance(obj, nn.Module):
+        # nn.Module stores params in internal module dict, not __dict__
+        for k, v in obj.items():
+            arrays.extend(_collect_arrays(v, f"{prefix}.{k}"))
     elif hasattr(obj, '__dict__'):
         for k, v in obj.__dict__.items():
             arrays.extend(_collect_arrays(v, f"{prefix}.{k}"))
