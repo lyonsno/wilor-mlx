@@ -1,8 +1,8 @@
 # wilor-mlx
 
-WiLoR hand pose estimation for Apple Silicon, rebuilt end-to-end in [MLX](https://github.com/ml-explore/mlx). No PyTorch dependency at inference time.
+WiLoR hand pose estimation for Apple Silicon, rebuilt end-to-end in [MLX](https://github.com/ml-explore/mlx).
 
-A from-scratch MLX port of [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the complete inference pipeline including ViT backbone, MANO hand model, and RefineNet refinement stage.
+A from-scratch MLX port of [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the complete inference pipeline including ViT backbone, MANO hand model, and RefineNet refinement stage. First run requires `torch` for a one-time conversion; after that, inference runs purely on MLX.
 
 ## Performance
 
@@ -57,7 +57,7 @@ The MANO hand model is licensed separately by the Max Planck Institute. We do no
 
 Float32 and int4 weight variants are available on the [model card](https://huggingface.co/lyonsno/wilor-mlx). Both run at the same speed on Apple Silicon.
 
-The original WiLoR-mini files (`wilor_final.ckpt`, `MANO_RIGHT.pkl`, `mano_mean_params.npz`) can be obtained by cloning [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and following its setup instructions. The `detector.pt` file is not needed by wilor-mlx.
+If you prefer to supply your own MANO data (e.g. obtained directly from [MPI](https://mano.is.tue.mpg.de/)), pass `mano_path=...` to `from_pretrained()`.
 
 ## Quick start
 
@@ -121,12 +121,8 @@ The port includes:
 - **RefineNet** — multi-scale deconvolution pyramid that samples ViT features at projected vertex locations via bilinear grid sampling, then refines the initial MANO parameter estimates.
 - **Weight converter** — loads PyTorch `.ckpt` files, handles Conv2d NCHW→NHWC transposition, ConvTranspose2d weight layout, and BatchNorm parameter mapping.
 
-## Note on weight conversion
-
-`from_pretrained` loads pre-converted `.safetensors` weights with no PyTorch dependency. `from_pytorch_checkpoint` requires `torch` for one-time conversion. Use the `python -m wilor_mlx.convert` CLI to convert and save weights for future torch-free loading.
-
 ## License
 
-The wilor-mlx code and distributed weight files are MIT licensed. The weights contain only ViT backbone, RefineNet, and learned embedding parameters.
+The wilor-mlx code and distributed weight files are MIT licensed. Our weights (on [HuggingFace](https://huggingface.co/lyonsno/wilor-mlx)) contain only ViT backbone, RefineNet, and learned embedding parameters — no MANO data is bundled or rehosted.
 
-**The MANO hand model is licensed separately** by the Max Planck Institute under a [non-commercial, non-redistributable research license](https://mano.is.tue.mpg.de/license.html). MANO data is not included in our weights or code. Users must obtain `MANO_RIGHT.pkl` directly from [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/) after registration.
+The [MANO hand model](https://mano.is.tue.mpg.de/) is separately licensed by the Max Planck Institute. `WiLoR.from_pretrained()` fetches upstream [WiLoR-mini](https://huggingface.co/warmshao/WiLoR-mini) assets and converts MANO data locally on your machine. If you prefer to obtain MANO directly from MPI, pass `mano_path=...` to use your own copy.
