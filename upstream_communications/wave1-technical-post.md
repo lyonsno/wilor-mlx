@@ -1,0 +1,29 @@
+# Wave 1 Technical Post — wilor-mlx
+
+Status: draft, pending operator review
+Channels: HuggingFace, MLX community, personal social, direct author note
+Gate: operator approval required before any public posting
+
+---
+
+We rebuilt WiLoR-mini end-to-end in MLX for Apple Silicon: ViT-H/16, MANO, and RefineNet, with sub-millimeter geometric parity against PyTorch.
+
+We couldn't find another public WiLoR MLX/CoreML port or MANO-in-MLX implementation, so we're publishing this as a technical priority flag and would love pointers if we missed related work.
+
+Setup is one line:
+
+```python
+from wilor_mlx import WiLoR
+model = WiLoR.from_pretrained()  # auto-downloads everything
+```
+
+Performance on M4 Max:
+- ~1.4x faster than PyTorch MPS in isolated model benchmarks (36ms vs 50ms)
+- ~3.4x faster in our live hand-tracking sidecar (61ms vs 208ms), where MLX's unified memory eliminates CPU↔GPU transfer overhead
+
+Numerical fidelity: 0.006 max absolute diff on mesh vertices and hand keypoints — sub-millimeter, verified layer-by-layer against PyTorch through all 32 transformer blocks. The remaining divergence is float32 accumulation noise, not a port error.
+
+Float32 and int4 safetensors weights are on Hugging Face. Int4 cuts the download from 2.4GB to 490MB with no speed difference on Apple Silicon.
+
+GitHub: https://github.com/lyonsno/wilor-mlx
+Weights: https://huggingface.co/lyonsno/wilor-mlx
