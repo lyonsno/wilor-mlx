@@ -118,55 +118,120 @@ class WiLoR:
 
     HF_REPO_ID = "lyonsno/wilor-mlx"
     HF_WEIGHTS_FILE = "wilor-mlx.safetensors"
+    WILOR_MINI_REPO_ID = "warmshao/WiLoR-mini"
+    MANO_CACHE_FILE = "mano.npz"
 
     @staticmethod
-    def from_pretrained(mano_path, weights_path=None):
-        """Load a WiLoR model from pre-converted MLX weights.
+    def from_pretrained(weights_path=None, mano_path=None):
+        """Load a WiLoR model with automatic weight downloading.
 
-        Auto-downloads model weights from HuggingFace on first call if
-        weights_path is not provided. No PyTorch dependency required.
+        On first call, downloads model weights from HuggingFace and converts
+        MANO data from the WiLoR-mini checkpoint. Everything is cached locally
+        for instant loading on subsequent calls.
 
-        MANO model data must be provided separately due to its
-        non-redistributable license (https://mano.is.tue.mpg.de/license.html).
+        First run requires torch (for one-time MANO conversion from PyTorch
+        checkpoint). After that, torch is never used again.
 
         Args:
-            mano_path: path to MANO_RIGHT.pkl (from mano.is.tue.mpg.de)
-                       or mano.npz (pre-converted via convert_mano CLI)
             weights_path: path to .safetensors file, or None to auto-download
-                          from HuggingFace (cached locally after first download)
+            mano_path: path to mano.npz or MANO_RIGHT.pkl, or None to
+                       auto-download and convert from WiLoR-mini checkpoint
         Returns:
             WiLoR model with loaded weights
         """
-        from wilor_mlx.convert import load_safetensors_weights, load_mano_npz, load_mano_from_pkl
+        from wilor_mlx.convert import load_safetensors_weights, load_mano_npz
 
         if weights_path is None:
             weights_path = WiLoR._download_weights()
 
+        if mano_path is None:
+            mano_path = WiLoR._ensure_mano()
+
         model = WiLoR()
         load_safetensors_weights(model, weights_path)
         if mano_path.endswith('.npz'):
-            load_mano_npz(model.mano, mano_path)
+            load_mano_npz(model, mano_path)
         else:
+            from wilor_mlx.convert import load_mano_from_pkl
             load_mano_from_pkl(model.mano, mano_path)
         return model
 
     @staticmethod
     def _download_weights():
-        """Download model weights from HuggingFace, with local caching."""
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError:
-            raise ImportError(
-                "huggingface_hub is required for auto-downloading weights. "
-                "Install it with: pip install huggingface_hub\n"
-                "Or download weights manually: "
-                "hf download lyonsno/wilor-mlx wilor-mlx.safetensors --local-dir weights/"
-            )
-        path = hf_hub_download(
+        """Download MLX model weights from HuggingFace."""
+        from huggingface_hub import hf_hub_download
+        return hf_hub_download(
             repo_id=WiLoR.HF_REPO_ID,
             filename=WiLoR.HF_WEIGHTS_FILE,
         )
-        return path
+
+    @staticmethod
+    def _ensure_mano():
+        """Ensure MANO data is available, converting from WiLoR-mini checkpoint if needed."""
+        import os
+
+        # Check for cached mano.npz next to the weights
+        cache_dir = os.path.join(
+            os.path.expanduser("~"), ".cache", "wilor-mlx"
+        )
+        mano_npz_path = os.path.join(cache_dir, WiLoR.MANO_CACHE_FILE)
+
+        if os.path.exists(mano_npz_path):
+            return mano_npz_path
+
+        # Need to convert — download WiLoR-mini files and extract MANO
+        print("First run: converting MANO data from WiLoR-mini checkpoint (requires torch)...")
+
+        try:
+            import torch
+        except ImportError:
+            raise ImportError(
+                "torch is required for one-time MANO conversion on first run.\n"
+                "Install it with: pip install torch\n"
+                "After the first run, torch is no longer needed."
+            )
+
+        from huggingface_hub import hf_hub_download
+        import numpy as np
+
+        # Download from WiLoR-mini's HuggingFace repo
+        ckpt_path = hf_hub_download(
+            repo_id=WiLoR.WILOR_MINI_REPO_ID,
+            subfolder="pretrained_models",
+            filename="wilor_final.ckpt",
+        )
+        mean_path = hf_hub_download(
+            repo_id=WiLoR.WILOR_MINI_REPO_ID,
+            subfolder="pretrained_models",
+            filename="mano_mean_params.npz",
+        )
+
+        # Extract MANO arrays from PyTorch checkpoint (plain tensors, no chumpy)
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        sd = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
+
+        mano_arrays = {
+            "v_template": sd["mano.v_template"].numpy().astype(np.float32),
+            "shapedirs": sd["mano.shapedirs"].numpy().astype(np.float32),
+            "posedirs": sd["mano.posedirs"].numpy().astype(np.float32),
+            "J_regressor": sd["mano.J_regressor"].numpy().astype(np.float32),
+            "parents": sd["mano.parents"].numpy().astype(np.int32),
+            "lbs_weights": sd["mano.lbs_weights"].numpy().astype(np.float32),
+            "extra_joints_idxs": sd["mano.extra_joints_idxs"].numpy().astype(np.int32),
+            "joint_map": sd["mano.joint_map"].numpy().astype(np.int32),
+        }
+
+        # Save init params too
+        mean_params = np.load(mean_path)
+        mano_arrays["init_hand_pose"] = mean_params["pose"].astype(np.float32)
+        mano_arrays["init_betas"] = mean_params["shape"].astype(np.float32)
+        mano_arrays["init_cam"] = mean_params["cam"].astype(np.float32)
+
+        os.makedirs(cache_dir, exist_ok=True)
+        np.savez(mano_npz_path, **mano_arrays)
+        print(f"MANO data cached at {mano_npz_path}")
+
+        return mano_npz_path
 
     @staticmethod
     def from_pytorch_checkpoint(ckpt_path, mano_model_path, mano_mean_path):

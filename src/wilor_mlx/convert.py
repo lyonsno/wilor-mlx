@@ -400,9 +400,10 @@ def save_mano_npz(model, output_path):
     print(f"Saved MANO buffers ({total_kb:.0f} KB) to {output_path}")
 
 
-def load_mano_npz(mano, npz_path):
-    """Load MANO buffers from a locally-generated .npz file."""
+def load_mano_npz(model, npz_path):
+    """Load MANO buffers and init params from a locally-generated .npz file."""
     data = np.load(npz_path)
+    mano = model.mano
     mano.v_template = mx.array(data['v_template'])
     mano.shapedirs = mx.array(data['shapedirs'])
     mano.posedirs = mx.array(data['posedirs'])
@@ -411,6 +412,11 @@ def load_mano_npz(mano, npz_path):
     mano.lbs_weights = mx.array(data['lbs_weights'])
     mano.extra_joints_idxs = mx.array(data['extra_joints_idxs'].astype(np.int32))
     mano.joint_map = mx.array(data['joint_map'].astype(np.int32))
+    # Init params (if present — auto-convert includes these)
+    if 'init_hand_pose' in data:
+        model.backbone.init_hand_pose = mx.array(data['init_hand_pose'].reshape(1, -1))
+        model.backbone.init_betas = mx.array(data['init_betas'].reshape(1, -1))
+        model.backbone.init_cam = mx.array(data['init_cam'].reshape(1, -1))
 
 
 if __name__ == "__main__":

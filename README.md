@@ -38,56 +38,24 @@ Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weigh
 git clone https://github.com/lyonsno/wilor-mlx
 cd wilor-mlx
 pip install -e .
-
-# Weight conversion requires torch (one-time only, not needed for inference)
-pip install torch
+pip install torch  # needed once for first-run MANO conversion, not used after
 ```
 
-Requires macOS with Apple Silicon, Python 3.10+. MLX is installed automatically.
+Requires macOS with Apple Silicon, Python 3.10+. MLX and other dependencies install automatically.
 
-## Getting the model weights
+## How it works
 
-### Option A: Download pre-converted weights (recommended)
+On the first call to `WiLoR.from_pretrained()`, wilor-mlx automatically:
 
-Pre-converted weights are on HuggingFace — **no PyTorch needed:**
+1. Downloads model weights from [HuggingFace](https://huggingface.co/lyonsno/wilor-mlx) (2.4 GB, cached locally)
+2. Downloads MANO hand model data from the [WiLoR-mini](https://huggingface.co/warmshao/WiLoR-mini) checkpoint (requires `torch` for one-time conversion)
+3. Caches converted MANO data at `~/.cache/wilor-mlx/mano.npz`
 
-| Variant | Size | Download |
-|---|---|---|
-| **float32** (recommended) | 2.4 GB | [wilor-mlx.safetensors](https://huggingface.co/lyonsno/wilor-mlx/resolve/main/wilor-mlx.safetensors) |
-| **int4** (5x smaller) | 490 MB | [wilor-mlx-int4.safetensors](https://huggingface.co/lyonsno/wilor-mlx/resolve/main/wilor-mlx-int4.safetensors) |
+After the first run, everything loads from cache and **torch is never used again.**
 
-```bash
-# Download with hf CLI
-hf download lyonsno/wilor-mlx wilor-mlx.safetensors --local-dir weights/
+The MANO hand model is licensed separately by the Max Planck Institute. We do not redistribute MANO data — it is downloaded from the original WiLoR-mini source and converted locally on your machine. See [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/) for MANO license terms.
 
-# Or int4 for faster download
-hf download lyonsno/wilor-mlx wilor-mlx-int4.safetensors --local-dir weights/
-```
-
-Both variants run at the same speed on Apple Silicon (~36ms). Int4 has slightly lower precision (< 2mm vs < 1mm on hand keypoints). See [model card](https://huggingface.co/lyonsno/wilor-mlx) for full benchmarks.
-
-### MANO hand model (required separately)
-
-The MANO hand model data is **not included** in our weights due to its [non-redistributable license](https://mano.is.tue.mpg.de/license.html) from the Max Planck Institute. You must obtain `MANO_RIGHT.pkl` separately:
-
-1. Register at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/)
-2. Download the MANO model files
-3. Place `MANO_RIGHT.pkl` in your project directory
-
-### Option B: Convert from PyTorch checkpoint yourself
-
-If you have the original [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) pretrained models:
-
-```bash
-pip install torch
-python -m wilor_mlx.convert \
-    pretrained_models/wilor_final.ckpt \
-    pretrained_models/MANO_RIGHT.pkl \
-    pretrained_models/mano_mean_params.npz \
-    weights/
-```
-
-This produces `weights/wilor-mlx.safetensors` (model weights, MIT) and `weights/mano.npz` (MANO data, local only — do not redistribute).
+Float32 and int4 weight variants are available on the [model card](https://huggingface.co/lyonsno/wilor-mlx). Both run at the same speed on Apple Silicon.
 
 The original WiLoR-mini files (`wilor_final.ckpt`, `MANO_RIGHT.pkl`, `mano_mean_params.npz`) can be obtained by cloning [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and following its setup instructions. The `detector.pt` file is not needed by wilor-mlx.
 
@@ -98,18 +66,8 @@ from wilor_mlx import WiLoR
 import mlx.core as mx
 import numpy as np
 
-# Load model — weights auto-download from HuggingFace on first run
-model = WiLoR.from_pretrained(mano_path="MANO_RIGHT.pkl")  # from mano.is.tue.mpg.de
-
-# Or with explicit weights path:
-# model = WiLoR.from_pretrained(mano_path="MANO_RIGHT.pkl", weights_path="weights/wilor-mlx.safetensors")
-
-# Or from PyTorch checkpoint (requires torch):
-# model = WiLoR.from_pytorch_checkpoint(
-#     "pretrained_models/wilor_final.ckpt",
-#     "pretrained_models/MANO_RIGHT.pkl",
-#     "pretrained_models/mano_mean_params.npz",
-# )
+# Load model — everything downloads and caches automatically
+model = WiLoR.from_pretrained()
 
 # Prepare input: a 256x256 RGB hand crop as uint8
 # WiLoR expects a tightly cropped hand image, typically from a hand detector
