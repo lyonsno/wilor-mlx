@@ -34,17 +34,35 @@ Requires macOS with Apple Silicon, Python 3.10+. MLX is installed automatically.
 
 ## Getting the model weights
 
-wilor-mlx loads weights from the original WiLoR-mini PyTorch checkpoint. You need three files:
+There are two options:
+
+### Option A: Pre-converted weights (recommended, no torch needed)
+
+Convert the weights once, then load without any PyTorch dependency:
+
+```bash
+# One-time conversion (requires torch)
+pip install torch
+python -m wilor_mlx.convert \
+    pretrained_models/wilor_final.ckpt \
+    pretrained_models/MANO_RIGHT.pkl \
+    pretrained_models/mano_mean_params.npz \
+    weights/wilor-mlx.safetensors
+```
+
+### Option B: Load from PyTorch checkpoint directly
+
+If you already have the WiLoR-mini pretrained models, you can load them directly (requires `torch`).
+
+### Getting the original WiLoR-mini files
+
+Both options need the original model files. Clone [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and follow its setup instructions. You need:
 
 1. **`wilor_final.ckpt`** — the WiLoR model checkpoint
-2. **`MANO_RIGHT.pkl`** — the MANO hand model
+2. **`MANO_RIGHT.pkl`** — the MANO hand model (requires registration at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/))
 3. **`mano_mean_params.npz`** — mean MANO parameters
 
-To download them, clone [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and follow its setup instructions to download the pretrained models. The files end up in `pretrained_models/`. Place that directory inside the wilor-mlx project root, or use absolute paths in the code below.
-
 The `detector.pt` file from WiLoR-mini is not needed by wilor-mlx.
-
-The MANO model requires registration at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/).
 
 ## Quick start
 
@@ -53,12 +71,15 @@ from wilor_mlx import WiLoR
 import mlx.core as mx
 import numpy as np
 
-# Load model (one-time — requires torch for weight conversion)
-model = WiLoR.from_pytorch_checkpoint(
-    "pretrained_models/wilor_final.ckpt",
-    "pretrained_models/MANO_RIGHT.pkl",
-    "pretrained_models/mano_mean_params.npz",
-)
+# Option A: Load from pre-converted weights (no torch needed)
+model = WiLoR.from_pretrained("weights/wilor-mlx.safetensors")
+
+# Option B: Load from PyTorch checkpoint (requires torch)
+# model = WiLoR.from_pytorch_checkpoint(
+#     "pretrained_models/wilor_final.ckpt",
+#     "pretrained_models/MANO_RIGHT.pkl",
+#     "pretrained_models/mano_mean_params.npz",
+# )
 
 # Prepare input: a 256x256 RGB hand crop as uint8
 # WiLoR expects a tightly cropped hand image, typically from a hand detector
@@ -114,7 +135,7 @@ The port includes:
 
 ## Note on weight conversion
 
-The `from_pytorch_checkpoint` method requires `torch` to be installed for the one-time weight conversion. After loading, inference runs purely on MLX with no PyTorch dependency. A future update will add pre-converted weight support to eliminate the torch dependency entirely.
+`from_pretrained` loads pre-converted `.safetensors` weights with no PyTorch dependency. `from_pytorch_checkpoint` requires `torch` for one-time conversion. Use the `python -m wilor_mlx.convert` CLI to convert and save weights for future torch-free loading.
 
 ## License
 

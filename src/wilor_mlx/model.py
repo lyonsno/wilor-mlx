@@ -117,8 +117,26 @@ class WiLoR:
         return pred_mano_params
 
     @staticmethod
+    def from_pretrained(weights_path):
+        """Load a WiLoR model from pre-converted MLX weights.
+
+        No PyTorch dependency required.
+
+        Args:
+            weights_path: path to .safetensors file
+        Returns:
+            WiLoR model with loaded weights
+        """
+        from wilor_mlx.convert import load_safetensors_weights
+        model = WiLoR()
+        load_safetensors_weights(model, weights_path)
+        return model
+
+    @staticmethod
     def from_pytorch_checkpoint(ckpt_path, mano_model_path, mano_mean_path):
         """Load a WiLoR model from a PyTorch checkpoint.
+
+        Requires torch to be installed (one-time weight conversion).
 
         Args:
             ckpt_path: path to wilor_final.ckpt
