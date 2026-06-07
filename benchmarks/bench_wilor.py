@@ -39,7 +39,7 @@ def bench_mlx(weights_path, mano_path, warmup=30, iterations=100):
     from wilor_mlx import WiLoR
     import numpy as np
 
-    model = WiLoR.from_pretrained(weights_path, mano_path=mano_path)
+    model = WiLoR.from_pretrained(weights_path=weights_path, mano_path=mano_path)
 
     # Deterministic input
     np.random.seed(42)
