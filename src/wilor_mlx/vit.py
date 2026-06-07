@@ -42,11 +42,10 @@ class PatchEmbed(nn.Module):
         self.patch_shape = (img_size[0] // patch_size, img_size[1] // patch_size)
         self.num_patches = self.patch_shape[0] * self.patch_shape[1]
         # MLX Conv2d expects NHWC input
-        # PyTorch: Conv2d(3, 1280, kernel_size=16, stride=16, padding=4)
-        # The WiLoR config has ratio=1, so stride = patch_size // ratio = 16
-        # padding = 4 + 2 * (ratio // 2 - 1) = 4 + 0 = 4
+        # PyTorch: Conv2d(3, 1280, kernel_size=16, stride=patch_size//ratio, padding=4+2*(ratio//2-1))
+        # With ratio=1: stride=16, padding = 4 + 2*(0-1) = 2
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size,
-                              stride=patch_size, padding=4)
+                              stride=patch_size, padding=2)
 
     def __call__(self, x):
         # x: (B, H, W, C) in MLX convention (NHWC)
