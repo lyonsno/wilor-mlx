@@ -141,36 +141,39 @@ class DeConvNet(nn.Module):
 
         # Branch 0: 640 → 320
         self.branch0_conv = nn.ConvTranspose2d(feat_dim // 2, feat_dim // 4,
-                                                kernel_size=4, stride=2, padding=1)
+                                                kernel_size=4, stride=2, padding=1,
+                                                bias=False)
         self.branch0_bn = nn.BatchNorm(feat_dim // 4)
 
         # Branch 1: 640 → 320 → 160
         self.branch1_conv0 = nn.ConvTranspose2d(feat_dim // 2, feat_dim // 4,
-                                                 kernel_size=4, stride=2, padding=1)
+                                                 kernel_size=4, stride=2, padding=1,
+                                                 bias=False)
         self.branch1_bn0 = nn.BatchNorm(feat_dim // 4)
         self.branch1_conv1 = nn.ConvTranspose2d(feat_dim // 4, feat_dim // 8,
-                                                 kernel_size=4, stride=2, padding=1)
+                                                 kernel_size=4, stride=2, padding=1,
+                                                 bias=False)
         self.branch1_bn1 = nn.BatchNorm(feat_dim // 8)
 
     def __call__(self, img_feat):
         # img_feat: (B, C, H, W) NCHW → NHWC for MLX conv
         B, C, H, W = img_feat.shape
         x = img_feat.transpose(0, 2, 3, 1)  # NHWC
-        x = nn.relu(self.first_conv(x))
+        x = self.first_conv(x)  # No ReLU — PyTorch uses bnrelu_final=False
 
         # Low res feature: 640-ch
         feat_low = x.transpose(0, 3, 1, 2)  # NCHW
 
-        # Branch 0: → 320-ch
+        # Branch 0: → 320-ch (ConvTranspose + BN + ReLU)
         b0 = self.branch0_conv(x)
-        b0 = self.branch0_bn(b0)
+        b0 = nn.relu(self.branch0_bn(b0))
         feat_mid = b0.transpose(0, 3, 1, 2)  # NCHW
 
-        # Branch 1: → 160-ch
+        # Branch 1: → 160-ch (ConvTranspose + BN + ReLU + ConvTranspose + BN + ReLU)
         b1 = self.branch1_conv0(x)
         b1 = nn.relu(self.branch1_bn0(b1))
         b1 = self.branch1_conv1(b1)
-        b1 = self.branch1_bn1(b1)
+        b1 = nn.relu(self.branch1_bn1(b1))
         feat_high = b1.transpose(0, 3, 1, 2)  # NCHW
 
         # Return high → low resolution
