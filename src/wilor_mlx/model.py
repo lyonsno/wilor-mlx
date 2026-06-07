@@ -51,8 +51,8 @@ class WiLoR:
     """Full WiLoR model in MLX.
 
     Usage:
-        model = WiLoR.from_pytorch_checkpoint(ckpt_path, mano_path)
-        pred = model(image)  # image: (B, H, W, 3) uint8 NHWC
+        model = WiLoR.from_pretrained()
+        pred = model(image)  # image: (B, 256, 256, 3) uint8 RGB NHWC
     """
 
     def __init__(self):
@@ -73,8 +73,8 @@ class WiLoR:
             dict with pred_keypoints_3d, pred_vertices, global_orient, hand_pose,
             betas, pred_cam — all as MLX arrays
         """
-        # Preprocess: flip BGR→RGB if needed, normalize
-        x = x[..., ::-1].astype(mx.float32) / 255.0
+        # Normalize (ImageNet mean/std, RGB order)
+        x = x.astype(mx.float32) / 255.0
         x = (x - self.IMAGE_MEAN) / self.IMAGE_STD
 
         batch_size = x.shape[0]

@@ -1,20 +1,22 @@
 """Reproducible benchmark for wilor-mlx vs PyTorch MPS WiLoR.
 
 Usage:
-    # MLX benchmark (no torch needed if using pre-converted weights)
-    python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors
+    # MLX benchmark
+    python benchmarks/bench_wilor.py --backend mlx \
+        --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz
 
     # PyTorch MPS benchmark (requires torch + WiLoR-mini)
     python benchmarks/bench_wilor.py --backend pytorch \
         --ckpt pretrained_models/wilor_final.ckpt \
-        --mano pretrained_models/MANO_RIGHT.pkl \
+        --mano-pkl pretrained_models/MANO_RIGHT.pkl \
         --mean-params pretrained_models/mano_mean_params.npz
 
     # Both (for comparison table)
     python benchmarks/bench_wilor.py --backend both \
         --weights weights/wilor-mlx.safetensors \
+        --mano-npz weights/mano.npz \
         --ckpt pretrained_models/wilor_final.ckpt \
-        --mano pretrained_models/MANO_RIGHT.pkl \
+        --mano-pkl pretrained_models/MANO_RIGHT.pkl \
         --mean-params pretrained_models/mano_mean_params.npz
 """
 
