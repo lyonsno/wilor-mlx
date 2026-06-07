@@ -25,6 +25,9 @@ The speedup comes from MLX's unified memory architecture eliminating CPU↔GPU t
 git clone https://github.com/lyonsno/wilor-mlx
 cd wilor-mlx
 pip install -e .
+
+# Weight conversion requires torch (one-time only, not needed for inference)
+pip install torch
 ```
 
 Requires macOS with Apple Silicon, Python 3.10+. MLX is installed automatically.
@@ -37,7 +40,9 @@ wilor-mlx loads weights from the original WiLoR-mini PyTorch checkpoint. You nee
 2. **`MANO_RIGHT.pkl`** — the MANO hand model
 3. **`mano_mean_params.npz`** — mean MANO parameters
 
-To download them, clone [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and follow its setup instructions to download the pretrained models. The files end up in `pretrained_models/`.
+To download them, clone [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and follow its setup instructions to download the pretrained models. The files end up in `pretrained_models/`. Place that directory inside the wilor-mlx project root, or use absolute paths in the code below.
+
+The `detector.pt` file from WiLoR-mini is not needed by wilor-mlx.
 
 The MANO model requires registration at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/).
 
@@ -72,7 +77,7 @@ camera = np.array(result['pred_cam'])                   # (1, 3) — weak-perspe
 
 ### Input format
 
-The model expects a **256×256 RGB crop of a hand**, as a `(B, 256, 256, 3)` uint8 MLX array in NHWC layout. In a typical pipeline, a hand detector (like YOLO) first finds the hand bounding box in a full frame, then the crop is passed to WiLoR for 3D pose estimation.
+The model expects a **256×256 RGB crop of a hand**, as a `(B, 256, 256, 3)` uint8 MLX array in NHWC layout. The model handles normalization internally (ImageNet mean/std). In a typical pipeline, a hand detector (like YOLO) first finds the hand bounding box in a full frame, then the crop is resized to 256×256 and passed to WiLoR for 3D pose estimation.
 
 ### Output format
 
