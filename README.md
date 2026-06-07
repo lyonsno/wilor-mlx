@@ -66,6 +66,14 @@ hf download lyonsno/wilor-mlx wilor-mlx-int4.safetensors --local-dir weights/
 
 Both variants run at the same speed on Apple Silicon (~36ms). Int4 has slightly lower precision (< 2mm vs < 1mm on hand keypoints). See [model card](https://huggingface.co/lyonsno/wilor-mlx) for full benchmarks.
 
+### MANO hand model (required separately)
+
+The MANO hand model data is **not included** in our weights due to its [non-redistributable license](https://mano.is.tue.mpg.de/license.html) from the Max Planck Institute. You must obtain `MANO_RIGHT.pkl` separately:
+
+1. Register at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/)
+2. Download the MANO model files
+3. Place `MANO_RIGHT.pkl` in your project directory
+
 ### Option B: Convert from PyTorch checkpoint yourself
 
 If you have the original [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) pretrained models:
@@ -79,7 +87,7 @@ python -m wilor_mlx.convert \
     weights/wilor-mlx.safetensors
 ```
 
-The original WiLoR-mini files (`wilor_final.ckpt`, `MANO_RIGHT.pkl`, `mano_mean_params.npz`) can be obtained by cloning [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and following its setup instructions. The MANO model requires registration at [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/). The `detector.pt` file is not needed by wilor-mlx.
+The original WiLoR-mini files (`wilor_final.ckpt`, `MANO_RIGHT.pkl`, `mano_mean_params.npz`) can be obtained by cloning [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and following its setup instructions. The `detector.pt` file is not needed by wilor-mlx.
 
 ## Quick start
 
@@ -89,7 +97,10 @@ import mlx.core as mx
 import numpy as np
 
 # Option A: Load from pre-converted weights (no torch needed)
-model = WiLoR.from_pretrained("weights/wilor-mlx.safetensors")
+model = WiLoR.from_pretrained(
+    "weights/wilor-mlx.safetensors",
+    mano_path="MANO_RIGHT.pkl",  # from mano.is.tue.mpg.de
+)
 
 # Option B: Load from PyTorch checkpoint (requires torch)
 # model = WiLoR.from_pytorch_checkpoint(
@@ -156,4 +167,6 @@ The port includes:
 
 ## License
 
-MIT. The MANO hand model has its own license — see [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/).
+The wilor-mlx code and distributed weight files are MIT licensed. The weights contain only ViT backbone, RefineNet, and learned embedding parameters.
+
+**The MANO hand model is licensed separately** by the Max Planck Institute under a [non-commercial, non-redistributable research license](https://mano.is.tue.mpg.de/license.html). MANO data is not included in our weights or code. Users must obtain `MANO_RIGHT.pkl` directly from [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/) after registration.

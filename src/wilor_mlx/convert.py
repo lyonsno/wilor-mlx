@@ -163,6 +163,70 @@ def _collect_arrays(obj, prefix=""):
     return arrays
 
 
+def load_mano_from_pkl(mano, pkl_path):
+    """Load MANO model buffers from the official MANO_RIGHT.pkl file.
+
+    MANO data is not included in wilor-mlx weights due to its
+    non-redistributable license. Users must obtain MANO_RIGHT.pkl
+    separately by registering at https://mano.is.tue.mpg.de/
+
+    Args:
+        mano: MANO model instance
+        pkl_path: path to MANO_RIGHT.pkl
+    """
+    import pickle
+    import sys
+
+    # The MANO pkl references chumpy (MPI autodiff lib). We can't install it
+    # (build fails on Python 3.14) and can't mock it cleanly (custom __reduce__).
+    # Solution: use smplx's loader which handles the chumpy deserialization,
+    # OR fall back to loading via the WiLoR checkpoint which already has the
+    # arrays in plain numpy form.
+    # Simplest: try loading, catch chumpy errors, advise user.
+    try:
+        with open(pkl_path, 'rb') as f:
+            mano_data = pickle.load(f, encoding='latin1')
+    except (ModuleNotFoundError, TypeError) as e:
+        if 'chumpy' in str(e):
+            raise RuntimeError(
+                f"Failed to load MANO pkl: {e}\n"
+                f"The MANO pkl file requires the 'chumpy' package to deserialize.\n"
+                f"Install it with: pip install chumpy\n"
+                f"Alternatively, use WiLoR.from_pytorch_checkpoint() which loads\n"
+                f"MANO data from the PyTorch checkpoint (already in numpy format)."
+            ) from e
+        raise
+
+    def to_np(v):
+        if isinstance(v, np.ndarray):
+            return v
+        if hasattr(v, 'r'):
+            return np.array(v.r)
+        return np.array(v)
+
+    mano.v_template = mx.array(to_np(mano_data['v_template']).astype(np.float32))
+    mano.shapedirs = mx.array(to_np(mano_data['shapedirs']).astype(np.float32))
+    # posedirs in pkl is (778, 3, 135), WiLoR expects (135, 2334) = (135, 778*3)
+    posedirs_raw = to_np(mano_data['posedirs']).astype(np.float32)  # (778, 3, 135)
+    mano.posedirs = mx.array(posedirs_raw.reshape(-1, posedirs_raw.shape[-1]).T)  # (135, 2334)
+    J_reg = mano_data['J_regressor']
+    mano.J_regressor = mx.array(np.array(J_reg.toarray() if hasattr(J_reg, 'toarray') else J_reg, dtype=np.float32))
+    mano.parents = mx.array(mano_data['kintree_table'][0].astype(np.int32))
+    mano.lbs_weights = mx.array(to_np(mano_data['weights']).astype(np.float32))
+
+    # Extra joint vertex indices (from smplx.vertex_ids['mano'])
+    mano.extra_joints_idxs = mx.array(np.array([744, 320, 443, 554, 671], dtype=np.int32))
+    mano.joint_map = mx.array(np.array(
+        [0, 13, 14, 15, 16, 1, 2, 3, 17, 4, 5, 6, 18, 10, 11, 12, 19, 7, 8, 9, 20],
+        dtype=np.int32
+    ))
+
+    arrays = [v for v in [mano.v_template, mano.shapedirs, mano.posedirs,
+              mano.J_regressor, mano.parents, mano.lbs_weights,
+              mano.extra_joints_idxs, mano.joint_map] if isinstance(v, mx.array)]
+    mx.eval(*arrays)
+
+
 def load_safetensors_weights(model, weights_path):
     """Load pre-converted MLX weights from a .safetensors file.
 
@@ -231,16 +295,7 @@ def load_safetensors_weights(model, weights_path):
         layer.weight = weights[f'refine_net.{name}.weight']
         layer.bias = weights[f'refine_net.{name}.bias']
 
-    # MANO
-    mano = model.mano
-    mano.v_template = weights['mano.v_template']
-    mano.shapedirs = weights['mano.shapedirs']
-    mano.posedirs = weights['mano.posedirs']
-    mano.J_regressor = weights['mano.J_regressor']
-    mano.parents = weights['mano.parents'].astype(mx.int32)
-    mano.lbs_weights = weights['mano.lbs_weights']
-    mano.extra_joints_idxs = weights['mano.extra_joints_idxs'].astype(mx.int32)
-    mano.joint_map = weights['mano.joint_map'].astype(mx.int32)
+    # MANO data is NOT in the safetensors file — loaded separately via load_mano_from_pkl()
 
     # Model-level
     model.IMAGE_MEAN = weights['IMAGE_MEAN']
@@ -309,10 +364,7 @@ def save_mlx_weights(model, output_path):
         all_weights[f'refine_net.{name}.weight'] = layer.weight
         all_weights[f'refine_net.{name}.bias'] = layer.bias
 
-    # MANO
-    for attr in ['v_template', 'shapedirs', 'posedirs', 'J_regressor', 'lbs_weights',
-                 'joint_map', 'extra_joints_idxs', 'parents']:
-        all_weights[f'mano.{attr}'] = getattr(model.mano, attr)
+    # MANO data is NOT saved — non-redistributable MPI license
 
     # Model-level
     all_weights['IMAGE_MEAN'] = model.IMAGE_MEAN
@@ -324,13 +376,55 @@ def save_mlx_weights(model, output_path):
     print(f"Saved {len(all_weights)} arrays ({total_mb:.0f} MB) to {output_path}")
 
 
+def save_mano_npz(model, output_path):
+    """Save MANO buffers as a separate .npz file for MANO-license-safe loading.
+
+    Users generate this from their own MANO_RIGHT.pkl obtained after MPI registration.
+    This file stays local and is never redistributed.
+    """
+    import os
+    mano = model.mano
+    mano_arrays = {
+        'v_template': np.array(mano.v_template),
+        'shapedirs': np.array(mano.shapedirs),
+        'posedirs': np.array(mano.posedirs),
+        'J_regressor': np.array(mano.J_regressor),
+        'parents': np.array(mano.parents),
+        'lbs_weights': np.array(mano.lbs_weights),
+        'extra_joints_idxs': np.array(mano.extra_joints_idxs),
+        'joint_map': np.array(mano.joint_map),
+    }
+    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+    np.savez(output_path, **mano_arrays)
+    total_kb = sum(v.nbytes for v in mano_arrays.values()) / 1024
+    print(f"Saved MANO buffers ({total_kb:.0f} KB) to {output_path}")
+
+
+def load_mano_npz(mano, npz_path):
+    """Load MANO buffers from a locally-generated .npz file."""
+    data = np.load(npz_path)
+    mano.v_template = mx.array(data['v_template'])
+    mano.shapedirs = mx.array(data['shapedirs'])
+    mano.posedirs = mx.array(data['posedirs'])
+    mano.J_regressor = mx.array(data['J_regressor'])
+    mano.parents = mx.array(data['parents'].astype(np.int32))
+    mano.lbs_weights = mx.array(data['lbs_weights'])
+    mano.extra_joints_idxs = mx.array(data['extra_joints_idxs'].astype(np.int32))
+    mano.joint_map = mx.array(data['joint_map'].astype(np.int32))
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) != 5:
-        print("Usage: python -m wilor_mlx.convert <ckpt> <mano_pkl> <mean_params> <output.safetensors>")
+        print("Usage: python -m wilor_mlx.convert <ckpt> <mano_pkl> <mean_params> <output_dir>")
+        print("  Produces: <output_dir>/wilor-mlx.safetensors + <output_dir>/mano.npz")
         sys.exit(1)
 
+    import os
     from wilor_mlx.model import WiLoR
     model = WiLoR()
     load_pytorch_checkpoint(model, sys.argv[1], sys.argv[2], sys.argv[3])
-    save_mlx_weights(model, sys.argv[4])
+
+    out_dir = sys.argv[4]
+    save_mlx_weights(model, os.path.join(out_dir, "wilor-mlx.safetensors"))
+    save_mano_npz(model, os.path.join(out_dir, "mano.npz"))
