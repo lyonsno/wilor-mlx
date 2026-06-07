@@ -6,18 +6,31 @@ This is a from-scratch MLX port of [WiLoR-mini](https://github.com/abcbdf/WiLoR-
 
 ## Performance
 
-Tested on M4 Max, single-image inference, float32:
+Tested on Apple M4 Max, single-image inference, float32:
 
-| Backend | Full pipeline | FPS |
+### Isolated benchmark (same input, same machine, back-to-back)
+
+| Backend | p50 | p90 | min | FPS |
+|---|---|---|---|---|
+| **MLX (wilor-mlx)** | **36 ms** | **36 ms** | **36 ms** | **28** |
+| PyTorch MPS (2.5.0) | 50 ms | 51 ms | 49 ms | 20 |
+
+**1.4x faster** in isolated model-stage benchmarks.
+
+### Live sidecar (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
+
+| Backend | Model p50 | Model p90 |
 |---|---|---|
-| PyTorch MPS (2.5.0) | 208 ms | ~5 |
-| **MLX (wilor-mlx)** | **50 ms** | **~20** |
+| **MLX (wilor-mlx)** | **61 ms** | **107 ms** |
+| PyTorch MPS (2.5.0) | ~208 ms | — |
 
-The entire MLX pipeline runs faster than just the PyTorch MPS ViT backbone alone (55 ms).
+**3.4x faster** in the live integration context, where MLX's unified memory eliminates the CPU↔GPU transfer overhead that dominates PyTorch MPS pipeline latency.
 
-### Why so fast?
+### Why the difference?
 
-The speedup comes from MLX's unified memory architecture eliminating CPU↔GPU transfer overhead. PyTorch MPS pays ~100ms in pipeline sync and memory transfers between stages. MLX's lazy evaluation builds one computation graph and executes it without round-trips.
+The isolated benchmark measures pure model compute. In a real application, PyTorch MPS pays ~100ms in pipeline sync and memory transfers between CPU and GPU stages. MLX's lazy evaluation builds one computation graph and executes it on unified memory without round-trips — so the integration speedup is larger than the compute speedup.
+
+Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors`
 
 ## Install
 
