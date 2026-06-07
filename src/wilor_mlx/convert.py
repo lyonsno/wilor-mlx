@@ -140,8 +140,11 @@ def load_pytorch_checkpoint(model, ckpt_path, mano_model_path, mano_mean_path):
     model.backbone.init_betas = mx.array(mean_params['shape'].astype(np.float32)).reshape(1, -1)
     model.backbone.init_cam = mx.array(mean_params['cam'].astype(np.float32)).reshape(1, -1)
 
-    # Evaluate all params to materialize
-    mx.eval(*_collect_arrays(model))
+    # Materialize in batches to avoid Metal shared event exhaustion
+    arrays = _collect_arrays(model)
+    batch_size = 64
+    for i in range(0, len(arrays), batch_size):
+        mx.eval(*arrays[i:i + batch_size])
 
     print(f"Loaded {len(sd)} parameters from checkpoint")
 
@@ -243,7 +246,12 @@ def load_safetensors_weights(model, weights_path):
     model.IMAGE_MEAN = weights['IMAGE_MEAN']
     model.IMAGE_STD = weights['IMAGE_STD']
 
-    mx.eval(*_collect_arrays(model))
+    # Materialize arrays in small batches to avoid exhausting Metal shared events
+    # under concurrent GPU pressure (TRELLIS, other MLX sessions, etc.)
+    arrays = _collect_arrays(model)
+    batch_size = 64
+    for i in range(0, len(arrays), batch_size):
+        mx.eval(*arrays[i:i + batch_size])
     print(f"Loaded {len(weights)} arrays from {weights_path}")
 
 
