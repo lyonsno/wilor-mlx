@@ -1,8 +1,8 @@
 # wilor-mlx
 
-WiLoR hand pose estimation running natively on Apple Silicon via [MLX](https://github.com/ml-explore/mlx). **4x faster than PyTorch MPS.**
+WiLoR hand pose estimation for Apple Silicon, rebuilt end-to-end in [MLX](https://github.com/ml-explore/mlx). No PyTorch dependency at inference time.
 
-This is a from-scratch MLX port of [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the complete inference pipeline including ViT backbone, MANO hand model, and RefineNet refinement stage. No PyTorch dependency at inference time.
+A from-scratch MLX port of [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the complete inference pipeline including ViT backbone, MANO hand model, and RefineNet refinement stage.
 
 ## Performance
 
@@ -30,7 +30,7 @@ Tested on Apple M4 Max, single-image inference, float32:
 
 The isolated benchmark measures pure model compute. In a real application, PyTorch MPS pays ~100ms in pipeline sync and memory transfers between CPU and GPU stages. MLX's lazy evaluation builds one computation graph and executes it on unified memory without round-trips — so the integration speedup is larger than the compute speedup.
 
-Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors`
+Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz`
 
 ## Install
 
@@ -84,8 +84,10 @@ python -m wilor_mlx.convert \
     pretrained_models/wilor_final.ckpt \
     pretrained_models/MANO_RIGHT.pkl \
     pretrained_models/mano_mean_params.npz \
-    weights/wilor-mlx.safetensors
+    weights/
 ```
+
+This produces `weights/wilor-mlx.safetensors` (model weights, MIT) and `weights/mano.npz` (MANO data, local only — do not redistribute).
 
 The original WiLoR-mini files (`wilor_final.ckpt`, `MANO_RIGHT.pkl`, `mano_mean_params.npz`) can be obtained by cloning [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) and following its setup instructions. The `detector.pt` file is not needed by wilor-mlx.
 
