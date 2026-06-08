@@ -17,14 +17,16 @@ Tested on Apple M4 Max, single-image inference, float32:
 
 **1.4x faster** in isolated model-stage benchmarks.
 
-### Live sidecar (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
+### Stable live sidecar window (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
 
-| Backend | Model p50 | Model p90 | Model p95 |
-|---|---|---|---|
-| **MLX (wilor-mlx)** | **~60 ms** | **~63 ms** | **~63 ms** |
-| PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms |
+| Backend | Model p50 | Model p90 | Model p95 | Model p99 |
+|---|---|---|---|---|
+| **MLX (wilor-mlx)** | **~61 ms** | **~62 ms** | **~63 ms** | **~66 ms** |
+| PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms | ~427 ms |
 
-**Flat ~60ms with virtually no tail** — only 5% spread from p50 to p95. That's the consistency you need for real-time interaction, not just batch inference. MLX's unified memory means no cross-device transfers to stall on, so latency stays predictable under load.
+**Flat ~61ms with virtually no tail** — only 8% spread from p50 to p99. That's the consistency you need for real-time interaction, not just batch inference. MLX's unified memory means no cross-device transfers to stall on, so latency stays predictable.
+
+MLX row: 500 consecutive frames from the current live sidecar during stable operation. MPS row: 102K-frame manifest history. Broader workstation telemetry with concurrent GPU workloads shows higher MLX tails — those reflect host contention, not model behavior.
 
 ### Why so consistent?
 
