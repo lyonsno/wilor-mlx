@@ -19,16 +19,16 @@ Tested on Apple M4 Max, single-image inference, float32:
 
 ### Live sidecar (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
 
-| Backend | Model p50 | Model p90 |
-|---|---|---|
-| **MLX (wilor-mlx)** | **~60 ms** | **~63 ms** |
-| PyTorch MPS (2.5.0) | ~85 ms | ~144 ms |
+| Backend | Model p50 | Model p90 | Model p95 |
+|---|---|---|---|
+| **MLX (wilor-mlx)** | **~60 ms** | **~63 ms** | **~63 ms** |
+| PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms |
 
-MLX is faster and significantly tighter — MPS tail latency is 2.3x worse at p90. MLX's unified memory eliminates the CPU↔GPU transfer overhead that causes MPS latency spikes.
+MLX is faster at every percentile, but the real win is consistency: **MLX p95 is 3.8x better than MPS p95.** MPS tail latency explodes under real workloads (p95 is 2.8x its own p50), while MLX stays flat — only 5% spread from p50 to p95. For a real-time hand tracking loop, predictability matters as much as speed.
 
 ### Why the difference?
 
-The isolated benchmark measures pure model compute. In a live sidecar, PyTorch MPS suffers from variable CPU↔GPU sync overhead that inflates tail latency — its p90 is nearly 3x its p50. MLX's lazy evaluation on unified memory produces tight, predictable latency with minimal spread between p50 and p90.
+The isolated benchmark measures pure model compute. In a live sidecar, PyTorch MPS suffers from variable CPU↔GPU sync overhead that blows up tail latency. MLX's lazy evaluation on unified memory produces tight, predictable latency because there are no cross-device transfers to stall on.
 
 Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz`
 
