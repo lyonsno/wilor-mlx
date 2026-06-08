@@ -81,20 +81,27 @@ def bench_mlx(weights_path, mano_path, warmup=30, iterations=100):
     }
 
 
-def bench_pytorch(ckpt_path, mano_path, mean_params_path, warmup=30, iterations=100):
+def bench_pytorch(ckpt_path, mano_path, mean_params_path, wilor_mini_path=None, warmup=30, iterations=100):
     import torch
     import numpy as np
-    import sys
+    import sys, os
 
     # Need WiLoR-mini on path
-    wilor_mini_path = None
-    for p in ["/private/tmp/wilor-mini-stride-bonewright/WiLoR-mini"]:
-        if __import__("os").path.exists(p):
-            wilor_mini_path = p
-            break
+    if wilor_mini_path is None:
+        # Try common locations
+        candidates = [
+            os.path.expanduser("~/dev/WiLoR-mini"),
+            os.path.expanduser("~/WiLoR-mini"),
+            "/private/tmp/wilor-mini-stride-bonewright/WiLoR-mini",
+        ]
+        for p in candidates:
+            if os.path.exists(p):
+                wilor_mini_path = p
+                break
 
     if wilor_mini_path is None:
-        print("ERROR: WiLoR-mini not found. Clone it and set the path.")
+        print("ERROR: WiLoR-mini not found. Clone https://github.com/warmshao/WiLoR-mini")
+        print("       and pass --wilor-mini-path <path>")
         return None
 
     sys.path.insert(0, wilor_mini_path)
@@ -163,6 +170,8 @@ def main():
                         help="Path to MANO_RIGHT.pkl (pytorch backend)")
     parser.add_argument("--mean-params", default=None,
                         help="Path to mano_mean_params.npz (pytorch backend)")
+    parser.add_argument("--wilor-mini-path", default=None,
+                        help="Path to WiLoR-mini checkout (pytorch backend)")
     parser.add_argument("--warmup", type=int, default=30)
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--json", action="store_true", help="Output JSON")
@@ -182,7 +191,7 @@ def main():
             return
         print(f"Benchmarking PyTorch MPS on {chip}...")
         pt_result = bench_pytorch(args.ckpt, args.mano_pkl, args.mean_params,
-                                   args.warmup, args.iterations)
+                                   args.wilor_mini_path, args.warmup, args.iterations)
         if pt_result:
             results["benchmarks"].append(pt_result)
 

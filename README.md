@@ -2,7 +2,7 @@
 
 WiLoR hand pose estimation for Apple Silicon, rebuilt end-to-end in [MLX](https://github.com/ml-explore/mlx).
 
-A from-scratch MLX port of [WiLoR-mini](https://github.com/abcbdf/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the complete inference pipeline including ViT backbone, MANO hand model, and RefineNet refinement stage. First run requires `torch` for a one-time conversion; after that, inference runs purely on MLX.
+A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the complete inference pipeline including ViT backbone, MANO hand model, and RefineNet refinement stage. First run requires `torch` for a one-time conversion; after that, inference runs purely on MLX.
 
 ## Performance
 
