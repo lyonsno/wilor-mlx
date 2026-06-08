@@ -8,15 +8,6 @@ A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) 
 
 Tested on Apple M4 Max, single-image inference, float32:
 
-### Isolated benchmark (same input, same machine, back-to-back)
-
-| Backend | p50 | p90 | min | FPS |
-|---|---|---|---|---|
-| **MLX (wilor-mlx)** | **36 ms** | **36 ms** | **36 ms** | **28** |
-| PyTorch MPS (2.5.0) | 50 ms | 51 ms | 49 ms | 20 |
-
-**1.4x faster** in isolated model-stage benchmarks.
-
 ### Stable live sidecar window (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
 
 | Backend | Model p50 | Model p90 | Model p95 | Model p99 |
@@ -31,6 +22,15 @@ MLX row: 500 consecutive frames from the current live sidecar during stable oper
 ### Why so consistent?
 
 MLX's lazy evaluation builds one computation graph on unified memory — there are no CPU↔GPU round-trips that can stall unpredictably. The result is tight, flat latency that makes 3D hand pose viable as a real-time control primitive.
+
+### Isolated model benchmark (same input, same machine, back-to-back)
+
+| Backend | p50 | p90 | min | FPS |
+|---|---|---|---|---|
+| **MLX (wilor-mlx)** | **36 ms** | **36 ms** | **36 ms** | **28** |
+| PyTorch MPS (2.5.0) | 50 ms | 51 ms | 49 ms | 20 |
+
+1.4x faster in pure model compute.
 
 Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz`
 
@@ -57,7 +57,7 @@ After the first run, everything loads from cache and **torch is never used again
 
 The MANO hand model is licensed separately by the Max Planck Institute. We do not redistribute MANO data — it is downloaded from the original WiLoR-mini source and converted locally on your machine. See [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/) for MANO license terms.
 
-Float32 and int4 weight variants are available on the [model card](https://huggingface.co/lyonsno/wilor-mlx). Both run at the same speed on Apple Silicon.
+Float32 and int4 weight variants are available on the [model card](https://huggingface.co/lyonsno/wilor-mlx). Both run at the same speed on Apple Silicon — at these sequence lengths (210 tokens) the model is compute-bound, not memory-bandwidth-bound, so smaller weights don't accelerate inference. Int4 is purely a deployment convenience (2.4 GB → 490 MB).
 
 If you prefer to supply your own MANO data (e.g. obtained directly from [MPI](https://mano.is.tue.mpg.de/)), pass `mano_path=...` to `from_pretrained()`.
 
