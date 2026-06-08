@@ -1,8 +1,9 @@
 # Wave 1 Technical Post — wilor-mlx
 
-Status: draft, pending operator review
-Channels: HuggingFace, MLX community, personal social, direct author note
+Status: final draft, pending operator go
+Channels: HuggingFace community post, MLX community, personal social
 Gate: operator approval required before any public posting
+Target: Tuesday 2026-06-09 12:00–13:00 ET
 
 ---
 
@@ -19,9 +20,11 @@ model = WiLoR.from_pretrained()  # auto-downloads weights + derives MANO locally
 
 First run requires `torch` for a one-time conversion of MANO hand model data from the upstream WiLoR-mini checkpoint; after that, inference runs purely on MLX. MANO is separately licensed by MPI and is not bundled — it's fetched from the public upstream source and converted on your machine.
 
-Performance on M4 Max:
+Performance on M4 Max (float32):
+
 - ~1.4x faster than PyTorch MPS in isolated model benchmarks (36ms vs 50ms)
 - In our live hand-tracking sidecar, MLX holds flat ~61ms with virtually no tail — p99 is ~66ms (8% spread from median). That's the consistency you need to use 3D hand pose as a real-time control primitive, not just a batch inference model.
+- The advantage also reproduced on a lower-bandwidth M2 Pro: across 80 archived hand-positive camera frames, MLX model-call was ~30% faster at p50 and p90, confirmed by a reversed measurement-order audit.
 
 Numerical fidelity: 0.006 max absolute diff on mesh vertices and hand keypoints — sub-millimeter, verified layer-by-layer against PyTorch through all 32 transformer blocks. The remaining divergence is float32 accumulation noise, not a port error.
 
