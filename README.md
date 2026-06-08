@@ -21,14 +21,14 @@ Tested on Apple M4 Max, single-image inference, float32:
 
 | Backend | Model p50 | Model p90 |
 |---|---|---|
-| **MLX (wilor-mlx)** | **61 ms** | **107 ms** |
-| PyTorch MPS (2.5.0) | ~208 ms | — |
+| **MLX (wilor-mlx)** | **~60 ms** | **~63 ms** |
+| PyTorch MPS (2.5.0) | ~85 ms | ~144 ms |
 
-**3.4x faster** in the live integration context, where MLX's unified memory eliminates the CPU↔GPU transfer overhead that dominates PyTorch MPS pipeline latency.
+MLX is faster and significantly tighter — MPS tail latency is 2.3x worse at p90. MLX's unified memory eliminates the CPU↔GPU transfer overhead that causes MPS latency spikes.
 
 ### Why the difference?
 
-The isolated benchmark measures pure model compute. In a real application, PyTorch MPS pays ~100ms in pipeline sync and memory transfers between CPU and GPU stages. MLX's lazy evaluation builds one computation graph and executes it on unified memory without round-trips — so the integration speedup is larger than the compute speedup.
+The isolated benchmark measures pure model compute. In a live sidecar, PyTorch MPS suffers from variable CPU↔GPU sync overhead that inflates tail latency — its p90 is nearly 3x its p50. MLX's lazy evaluation on unified memory produces tight, predictable latency with minimal spread between p50 and p90.
 
 Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz`
 

@@ -21,7 +21,7 @@ First run requires `torch` for a one-time conversion of MANO hand model data fro
 
 Performance on M4 Max:
 - ~1.4x faster than PyTorch MPS in isolated model benchmarks (36ms vs 50ms)
-- ~3.4x faster in our live hand-tracking sidecar (~60ms vs ~208ms), where MLX's unified memory eliminates CPU↔GPU transfer overhead
+- Much tighter in live sidecar use: ~60ms p50 / ~63ms p90 vs MPS's ~85ms p50 / ~144ms p90. MPS tail latency is 2.3x worse — MLX's unified memory eliminates the CPU↔GPU sync spikes that make MPS unpredictable
 
 Numerical fidelity: 0.006 max absolute diff on mesh vertices and hand keypoints — sub-millimeter, verified layer-by-layer against PyTorch through all 32 transformer blocks. The remaining divergence is float32 accumulation noise, not a port error.
 
