@@ -24,11 +24,11 @@ Tested on Apple M4 Max, single-image inference, float32:
 | **MLX (wilor-mlx)** | **~60 ms** | **~63 ms** | **~63 ms** |
 | PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms |
 
-MLX is faster at every percentile, but the real win is consistency: **MLX p95 is 3.8x better than MPS p95.** MPS tail latency explodes under real workloads (p95 is 2.8x its own p50), while MLX stays flat — only 5% spread from p50 to p95. For a real-time hand tracking loop, predictability matters as much as speed.
+**Flat ~60ms with virtually no tail** — only 5% spread from p50 to p95. That's the consistency you need for real-time interaction, not just batch inference. MLX's unified memory means no cross-device transfers to stall on, so latency stays predictable under load.
 
-### Why the difference?
+### Why so consistent?
 
-The isolated benchmark measures pure model compute. In a live sidecar, PyTorch MPS suffers from variable CPU↔GPU sync overhead that blows up tail latency. MLX's lazy evaluation on unified memory produces tight, predictable latency because there are no cross-device transfers to stall on.
+MLX's lazy evaluation builds one computation graph on unified memory — there are no CPU↔GPU round-trips that can stall unpredictably. The result is tight, flat latency that makes 3D hand pose viable as a real-time control primitive.
 
 Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz`
 
