@@ -32,6 +32,8 @@ MLX's lazy evaluation builds one computation graph on unified memory — there a
 
 1.4x faster in pure model compute.
 
+The advantage also reproduced on a lower-bandwidth M2 Pro validation box: across 80 archived hand-positive camera frames, MLX model-call p50/p90/p95 was 252/355/418ms versus PyTorch MPS 358/490/571ms. A reversed-order audit (PyTorch MPS running first) confirmed the result.
+
 Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz`
 
 ## Install
