@@ -25,7 +25,7 @@ Performance on M4 Max:
 
 Numerical fidelity: 0.006 max absolute diff on mesh vertices and hand keypoints — sub-millimeter, verified layer-by-layer against PyTorch through all 32 transformer blocks. The remaining divergence is float32 accumulation noise, not a port error.
 
-Float32 and int4 safetensors weights are on Hugging Face. Int4 cuts the download from 2.4GB to 490MB with no speed difference on Apple Silicon.
+Float32 and int4 safetensors weights are on Hugging Face. Int4 cuts the download from 2.4GB to 490MB — same inference speed because the model is compute-bound at 210 tokens, not memory-bandwidth-bound.
 
 GitHub: https://github.com/lyonsno/wilor-mlx
 Weights: https://huggingface.co/lyonsno/wilor-mlx
