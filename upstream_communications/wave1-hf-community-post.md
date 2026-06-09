@@ -42,7 +42,7 @@ Flat ~61ms with virtually no tail — 8% spread from p50 to p99. MLX's unified m
 | **MLX** | **36 ms** | **28** |
 | PyTorch MPS | 50 ms | 20 |
 
-1.4x faster in pure model compute. The advantage also reproduced on a lower-bandwidth M2 Pro across 80 archived hand-positive camera frames (~30% faster at p50/p90), confirmed by a reversed measurement-order audit.
+1.4x faster in pure model compute. The advantage also reproduced on a lower-bandwidth M2 Pro across 80 archived hand-positive camera frames (~30% faster at p50), confirmed by a reversed measurement-order audit.
 
 ## Numerical accuracy
 

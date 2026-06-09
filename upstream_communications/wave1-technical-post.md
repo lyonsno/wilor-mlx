@@ -24,7 +24,7 @@ Performance on M4 Max (float32):
 
 - ~1.4x faster than PyTorch MPS in isolated model benchmarks (36ms vs 50ms)
 - In our live hand-tracking sidecar, MLX holds flat ~61ms with virtually no tail — p99 is ~66ms (8% spread from median). That's the consistency you need to use 3D hand pose as a real-time control primitive, not just a batch inference model.
-- The advantage also reproduced on a lower-bandwidth M2 Pro: across 80 archived hand-positive camera frames, MLX model-call was ~30% faster at p50 and p90, confirmed by a reversed measurement-order audit.
+- The advantage also reproduced on a lower-bandwidth M2 Pro: across 80 archived hand-positive camera frames, MLX model-call was ~30% faster at p50, confirmed by a reversed measurement-order audit.
 
 Numerical fidelity: 0.006 max absolute diff on mesh vertices and hand keypoints — sub-millimeter, verified layer-by-layer against PyTorch through all 32 transformer blocks. The remaining divergence is float32 accumulation noise, not a port error.
 

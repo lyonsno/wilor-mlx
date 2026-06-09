@@ -230,18 +230,6 @@ def main():
 
     # --- Test 5: 32 matmuls in one graph (single eval) ---
     print("5. 32 chained matmuls in one graph (single dispatch)...")
-    # Chain: each output feeds the next (keeps graph connected)
-    c = mx.random.normal((D * mlp_ratio, D))
-    mx.eval(c)
-
-    def run_32_chained():
-        h = a @ b  # (210, 5120)
-        for _ in range(31):
-            h = h @ c  # (210, 1280)
-            h = h @ b  # (210, 5120)
-        mx.eval(h)
-
-    # Actually this changes shapes. Let's do square matmuls instead.
     sq_a = mx.random.normal((N, D))
     sq_b = mx.random.normal((D, D))
     mx.eval(sq_a, sq_b)
