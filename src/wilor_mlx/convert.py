@@ -11,6 +11,7 @@ Handles:
 import pickle
 import numpy as np
 import mlx.core as mx
+import mlx.nn as nn
 
 
 def _t(x):
@@ -232,8 +233,54 @@ def load_mano_from_pkl(mano, pkl_path):
     mx.eval(*arrays)
 
 
+def _is_quantized(weights, prefix):
+    """Check if a Linear layer's weights are quantized (has scales key)."""
+    return f'{prefix}.scales' in weights
+
+
+def _load_linear(layer, weights, prefix, parent=None, attr_name=None):
+    """Load a Linear layer, replacing with QuantizedLinear if weights are int4.
+
+    Args:
+        layer: the nn.Linear to load into (or replace)
+        weights: full weight dict
+        prefix: key prefix like 'backbone.blocks.0.attn.qkv'
+        parent: parent module (needed to replace the layer attribute)
+        attr_name: attribute name on parent (needed to replace the layer attribute)
+    """
+    if _is_quantized(weights, prefix):
+        # Replace nn.Linear with nn.QuantizedLinear
+        w = weights[f'{prefix}.weight']
+        scales = weights[f'{prefix}.scales']
+        # Derive dimensions: weight is (out, packed_in) uint32
+        # Each uint32 holds 8 int4 values, so in_features = packed_in * 8
+        out_features = w.shape[0]
+        in_features = w.shape[1] * 8  # 8 int4 values per uint32
+        group_size = in_features // scales.shape[1]
+        has_bias = f'{prefix}.bias' in weights
+        ql = nn.QuantizedLinear(in_features, out_features, bias=has_bias,
+                                group_size=group_size, bits=4)
+        ql.weight = w
+        ql.scales = scales
+        ql.biases = weights[f'{prefix}.biases']
+        if has_bias:
+            ql.bias = weights[f'{prefix}.bias']
+        if parent is not None and attr_name is not None:
+            setattr(parent, attr_name, ql)
+        return ql
+    else:
+        layer.weight = weights[f'{prefix}.weight']
+        if f'{prefix}.bias' in weights:
+            layer.bias = weights[f'{prefix}.bias']
+        return layer
+
+
 def load_safetensors_weights(model, weights_path):
     """Load pre-converted MLX weights from a .safetensors file.
+
+    Supports both float32 and int4 quantized weights. Int4 weights are
+    detected by the presence of scales/biases keys and the corresponding
+    nn.Linear layers are replaced with nn.QuantizedLinear automatically.
 
     No PyTorch dependency required.
     """
@@ -251,11 +298,10 @@ def load_safetensors_weights(model, weights_path):
     bb.patch_embed.proj.weight = weights['backbone.patch_embed.proj.weight']
     bb.patch_embed.proj.bias = weights['backbone.patch_embed.proj.bias']
 
-    # Embedding linears
+    # Embedding linears (small layers, not quantized)
     for name in ['pose_emb', 'shape_emb', 'cam_emb', 'decpose', 'decshape', 'deccam']:
         layer = getattr(bb, name)
-        layer.weight = weights[f'backbone.{name}.weight']
-        layer.bias = weights[f'backbone.{name}.bias']
+        _load_linear(layer, weights, f'backbone.{name}', bb, name)
 
     # Transformer blocks
     for i in range(32):
@@ -263,16 +309,12 @@ def load_safetensors_weights(model, weights_path):
         p = f'backbone.blocks.{i}'
         blk.norm1.weight = weights[f'{p}.norm1.weight']
         blk.norm1.bias = weights[f'{p}.norm1.bias']
-        blk.attn.qkv.weight = weights[f'{p}.attn.qkv.weight']
-        blk.attn.qkv.bias = weights[f'{p}.attn.qkv.bias']
-        blk.attn.proj.weight = weights[f'{p}.attn.proj.weight']
-        blk.attn.proj.bias = weights[f'{p}.attn.proj.bias']
+        _load_linear(blk.attn.qkv, weights, f'{p}.attn.qkv', blk.attn, 'qkv')
+        _load_linear(blk.attn.proj, weights, f'{p}.attn.proj', blk.attn, 'proj')
         blk.norm2.weight = weights[f'{p}.norm2.weight']
         blk.norm2.bias = weights[f'{p}.norm2.bias']
-        blk.mlp.fc1.weight = weights[f'{p}.mlp.fc1.weight']
-        blk.mlp.fc1.bias = weights[f'{p}.mlp.fc1.bias']
-        blk.mlp.fc2.weight = weights[f'{p}.mlp.fc2.weight']
-        blk.mlp.fc2.bias = weights[f'{p}.mlp.fc2.bias']
+        _load_linear(blk.mlp.fc1, weights, f'{p}.mlp.fc1', blk.mlp, 'fc1')
+        _load_linear(blk.mlp.fc2, weights, f'{p}.mlp.fc2', blk.mlp, 'fc2')
 
     bb.last_norm.weight = weights['backbone.last_norm.weight']
     bb.last_norm.bias = weights['backbone.last_norm.bias']
@@ -297,8 +339,7 @@ def load_safetensors_weights(model, weights_path):
 
     for name in ['dec_pose', 'dec_cam', 'dec_shape']:
         layer = getattr(rn, name)
-        layer.weight = weights[f'refine_net.{name}.weight']
-        layer.bias = weights[f'refine_net.{name}.bias']
+        _load_linear(layer, weights, f'refine_net.{name}', rn, name)
 
     # MANO data is NOT in the safetensors file — loaded separately via load_mano_from_pkl()
 
