@@ -2,7 +2,7 @@
 
 Status: final draft, pending operator go
 Surface: HuggingFace community post on BasinShapers/wilor-mlx model page
-Target: Tuesday 2026-06-09 12:00 ET
+Target: immediate, pending operator go
 Gate: operator approval required before posting
 
 ---
