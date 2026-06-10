@@ -34,7 +34,7 @@ the whole difference between "tech demo" and "feels like an input
 device" — MPS would mostly be fine, then randomly hitch hard
 enough to break the illusion.
 
-The reason is mostly architectural: PyTorch MPS has to shuttle tensors between CPU and GPU memory, and those transfers can stall behind whatever else the GPU is doing. MLX builds a lazy computation graph on unified memory and evaluates it in one shot. There's nothing to stall on, so the latency stays flat.
+The reason is mostly architectural: PyTorch's MPS backend dispatches each operation as its own Metal kernel eagerly, with synchronization points that can block behind other GPU work. MLX builds a lazy computation graph and evaluates it in fewer, fused dispatches with no implicit sync in the hot path. Both use the same unified memory — the difference is dispatch overhead and when synchronization happens.
 
 So some problem spaces are suddenly more viable.
 
