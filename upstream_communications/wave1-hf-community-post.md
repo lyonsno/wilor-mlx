@@ -28,11 +28,13 @@ First run needs `torch` once for MANO conversion from the upstream WiLoR-mini ch
 
 The important measurement is the live sidecar route we actually use for interaction: camera frame → hand crop → WiLoR-mini pose/reconstruction → hand-pose event.
 
-On a clean post-reboot M4 Max same-harness smoke over recent Perceptasia saved frames, MLX runs the pose/reconstruction model stage at about 37ms median versus 49ms for PyTorch MPS, and the full saved-frame route at about 49ms versus 60ms. That is roughly a 1.3x model-stage advantage and a 1.2x full-route advantage on the fair comparison denominator we trust most right now.
+On a clean post-reboot M4 Max same-harness smoke over recent 160x120 saved frames from a gesture UI prototype, MLX runs the pose/reconstruction model stage at about 37ms median versus 49ms for PyTorch MPS, and the full saved-frame route at about 49ms versus 60ms. That is roughly a 1.3x model-stage advantage and a 1.2x full-route advantage on the fair comparison denominator we trust most right now.
 
 That latency is low enough to make 3D hand pose plausible as a real-time control primitive, not just a batch inference model. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
 
 Older app-level PyTorch MPS telemetry is what motivated the port; clean reruns moved the comparison denominator enough that we're not using the old tail history as a fresh universal PyTorch-vs-MLX headline.
+
+Larger derived-frame stress tests widen both backends; MLX remained faster in those runs, but we treat those numbers as route/runtime stress evidence rather than the headline model benchmark.
 
 Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than headline copy.
 

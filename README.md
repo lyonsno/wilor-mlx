@@ -8,11 +8,13 @@ A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) 
 
 Tested on Apple M4 Max, single-image inference, float32.
 
-### Live sidecar behavior (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
+### Live sidecar behavior (gesture UI prototype)
 
 The strongest launch evidence is the route we actually use for interaction: camera frame → hand crop → WiLoR-mini pose/reconstruction sidecar → hand-pose event.
 
-On a clean post-reboot M4 Max same-harness smoke over recent Perceptasia saved frames, MLX runs the pose/reconstruction model stage at about 37ms median versus 49ms for PyTorch MPS, and the full saved-frame route at about 49ms versus 60ms. That is roughly a 1.3x model-stage advantage and a 1.2x full-route advantage on the fair comparison denominator we trust most right now.
+On a clean post-reboot M4 Max same-harness smoke over recent 160x120 saved frames from a gesture UI prototype, MLX runs the pose/reconstruction model stage at about 37ms median versus 49ms for PyTorch MPS, and the full saved-frame route at about 49ms versus 60ms. That is roughly a 1.3x model-stage advantage and a 1.2x full-route advantage on the fair comparison denominator we trust most right now.
+
+Larger derived-frame stress tests widen both backends; MLX remained faster in those runs, but we treat those numbers as route/runtime stress evidence rather than the headline model benchmark.
 
 Older app-level telemetry is what pushed us toward MLX in the first place, but clean reruns narrowed the comparison denominator enough that we are not using the old tail story as a fresh universal PyTorch-vs-MLX headline. The current public claim is narrower and stronger: WiLoR-mini now has a native MLX runtime on Apple Silicon, with live sidecar latency low enough to build interaction on.
 

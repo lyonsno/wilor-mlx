@@ -24,7 +24,7 @@ Weights: https://huggingface.co/BasinShapers/wilor-mlx
 
 Rebuilt WiLoR-mini — 3D hand pose estimation with ViT-H/16, MANO, and RefineNet — end-to-end in MLX for Apple Silicon.
 
-The real win is in live use: inside our hand-tracking sidecar, the clean post-reboot M4 Max same-harness route puts MLX around 37ms median for the pose/reconstruction model stage versus 49ms for PyTorch MPS, and around 49ms versus 60ms for the full saved-frame route.
+The real win is in live use: inside a gesture UI sidecar, the clean post-reboot M4 Max same-harness route puts MLX around 37ms median for the pose/reconstruction model stage versus 49ms for PyTorch MPS, and around 49ms versus 60ms for the full saved-frame route.
 
 Older app-level PyTorch MPS telemetry is what motivated the port, but clean reruns moved the comparison denominator enough that I'm not using the old tail history as today's headline.
 
