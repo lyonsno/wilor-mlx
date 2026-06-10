@@ -1,6 +1,6 @@
 # HuggingFace Community Post — wilor-mlx
 
-Status: posted 2026-06-10
+Status: posted and pinned 2026-06-10
 Surface: Hugging Face repo discussion on BasinShapers/wilor-mlx
 Live: https://huggingface.co/BasinShapers/wilor-mlx/discussions/1
 Gate: fulfilled by operator posting
