@@ -2,7 +2,7 @@
 
 WiLoR hand pose estimation for Apple Silicon, rebuilt end-to-end in [MLX](https://github.com/ml-explore/mlx).
 
-A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the complete inference pipeline including ViT backbone, MANO hand model, and RefineNet refinement stage. First run requires `torch` for a one-time conversion; after that, inference runs purely on MLX.
+A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the pose/reconstruction model including ViT backbone, MANO hand model, and RefineNet refinement stage. It expects a cropped hand image from a separate detector. First run requires `torch` for a one-time MANO conversion; after that, inference runs purely on MLX.
 
 ## Performance
 
@@ -15,26 +15,23 @@ Tested on Apple M4 Max, single-image inference, float32:
 | **MLX (wilor-mlx)** | **~61 ms** | **~62 ms** | **~63 ms** | **~66 ms** |
 | PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms | ~427 ms |
 
-**Flat ~61ms with virtually no tail** — only 8% spread from p50 to p99. That's the consistency you need for real-time interaction, not just batch inference. MLX's unified memory means no cross-device transfers to stall on, so latency stays predictable.
+**Flat ~61ms with virtually no tail** — only 8% spread from p50 to p99. That's the consistency you need for real-time interaction, not just batch inference. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
 
 MLX row: 500 consecutive frames from the current live sidecar during stable operation. MPS row: 102K-frame manifest history. Broader workstation telemetry with concurrent GPU workloads shows higher MLX tails — those reflect host contention, not model behavior.
 
 ### Why so consistent?
 
-MLX's lazy evaluation builds one computation graph on unified memory — there are no CPU↔GPU round-trips that can stall unpredictably. The result is tight, flat latency that makes 3D hand pose viable as a real-time control primitive.
+MLX's lazy evaluation builds a graph that can be evaluated in fewer, fused submissions. That reduces dispatch and synchronization surface area in this short-context ViT workload, which is where our traces suggest the PyTorch MPS tail was coming from. The result is tight, flat latency that makes 3D hand pose viable as a real-time control primitive.
 
-### Isolated model benchmark (same input, same machine, back-to-back)
+### Local benchmark harness
 
-| Backend | p50 | p90 | min | FPS |
-|---|---|---|---|---|
-| **MLX (wilor-mlx)** | **36 ms** | **36 ms** | **36 ms** | **28** |
-| PyTorch MPS (2.5.0) | 50 ms | 51 ms | 49 ms | 20 |
+The repository includes a local benchmark harness for route checks and local reproduction:
 
-1.4x faster in pure model compute.
+```bash
+python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz
+```
 
-The advantage also reproduced on a lower-bandwidth M2 Pro validation box: across 80 archived hand-positive camera frames, MLX model-call p50/p90/p95 was 252/355/418ms versus PyTorch MPS 358/490/571ms. A reversed-order audit (PyTorch MPS running first) confirmed the result.
-
-Reproduce the benchmark: `python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz`
+We are not using a paired isolated benchmark as the headline claim right now. The strongest current evidence is the live sidecar table above: it measures the route that actually matters for using hand pose as a real-time input primitive. Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than launch headline copy.
 
 ## Install
 

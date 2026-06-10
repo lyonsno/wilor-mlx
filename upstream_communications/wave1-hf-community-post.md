@@ -33,16 +33,9 @@ First run needs `torch` once for MANO conversion from the upstream WiLoR-mini ch
 | **MLX (wilor-mlx)** | **~61 ms** | **~62 ms** | **~63 ms** | **~66 ms** |
 | PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms | ~427 ms |
 
-Flat ~61ms with virtually no tail — 8% spread from p50 to p99. MLX's unified memory means no CPU↔GPU transfer stalls.
+Flat ~61ms with virtually no tail — 8% spread from p50 to p99. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
 
-**Isolated model benchmark:**
-
-| Backend | p50 | FPS |
-|---|---|---|
-| **MLX** | **36 ms** | **28** |
-| PyTorch MPS | 50 ms | 20 |
-
-1.4x faster in pure model compute. The advantage also reproduced on a lower-bandwidth M2 Pro across 80 archived hand-positive camera frames (~30% faster at p50), confirmed by a reversed measurement-order audit.
+Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than headline copy.
 
 ## Numerical accuracy
 
