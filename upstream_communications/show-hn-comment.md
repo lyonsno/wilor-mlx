@@ -25,7 +25,7 @@ That's the difference between something that lags once or twice a second and som
 
 Setup is one line:
 
-  model = WiLoR.from_pretrained()
+  `model = WiLoR.from_pretrained()`
 
 First run needs torch for a one-time MANO conversion. After that, inference is pure MLX.
 
