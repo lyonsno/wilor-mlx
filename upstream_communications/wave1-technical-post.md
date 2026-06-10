@@ -1,9 +1,9 @@
 # Wave 1 Technical Post — wilor-mlx
 
-Status: final draft, pending operator go
-Channels: HuggingFace community post, MLX community, personal social
-Gate: operator approval required before any public posting
-Target: operator discretion after HF checkpoint/post
+Status: HF discussion posted; remaining channels pending operator go
+Channels: Hugging Face discussion posted; MLX community / personal social remain held
+Gate: operator approval required before any additional public posting
+Live HF discussion: https://huggingface.co/BasinShapers/wilor-mlx/discussions/1
 
 ---
 

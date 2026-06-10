@@ -1,8 +1,8 @@
 # Social Post — wilor-mlx
 
-Status: final draft, pending operator go
+Status: held for Wave 2/demo-social unless operator explicitly chooses a narrow technical ping
 Surface: Twitter/X, LinkedIn
-Target: operator discretion after HF checkpoint/post
+Target: after gesture UI demo video, or narrow technical ping only by explicit operator choice
 Gate: operator approval required before posting
 
 ---

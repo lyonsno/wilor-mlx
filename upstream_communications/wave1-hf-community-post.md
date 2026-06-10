@@ -1,9 +1,9 @@
 # HuggingFace Community Post — wilor-mlx
 
-Status: final draft, pending operator go
-Surface: HuggingFace community post on BasinShapers/wilor-mlx model page
-Target: immediate, pending operator go
-Gate: operator approval required before posting
+Status: posted 2026-06-10
+Surface: Hugging Face repo discussion on BasinShapers/wilor-mlx
+Live: https://huggingface.co/BasinShapers/wilor-mlx/discussions/1
+Gate: fulfilled by operator posting
 
 ---
 
