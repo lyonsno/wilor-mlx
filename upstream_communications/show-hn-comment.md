@@ -3,7 +3,7 @@
 Status: final draft, pending operator go
 Surface: Hacker News (Show HN)
 Link: https://github.com/lyonsno/wilor-mlx
-Title: Show HN: WiLoR hand pose in MLX - p99 427ms to 66ms vs PyTorch MPS
+Title: Show HN: WiLoR hand pose rebuilt in MLX for Apple Silicon
 Target: Wednesday 2026-06-10 morning ET (or operator discretion)
 Gate: operator posts manually
 
@@ -15,18 +15,11 @@ So, like everybody who is occasionally feeling both imaginative and lazy, I star
 
 I went looking for hand tracking on Mac that could run at something close to real-time, and the best thing I found was WiLoR-mini. Since I'd already been working with MLX, I used it to rebuild the WiLoR-mini reconstruction model end-to-end — ViT-H/16 backbone, MANO hand model, and RefineNet — so the pose/reconstruction stage can run natively on Apple Silicon without PyTorch at inference time.
 
-It was not magic. But it did help. The win I trust most is the tail behavior in a live capture loop:
+It was not magic. But it did help. On my M4 Max, the live MLX sidecar now sits in the low-50ms range for the pose/reconstruction model once warm and tracking. That is the number I care about here: not a one-off batch benchmark, but the route that turns camera frames into hand-pose events for an actual interaction loop.
 
-            PyTorch MPS    MLX
-    p50     85ms           61ms
-    p90     144ms          62ms
-    p95     238ms          63ms
-    p99     427ms          66ms
+I originally reached for MLX because the PyTorch MPS route in my app could be fine at the median and then throw enough tail latency to make the hand tracker feel unreliable. A clean rerun changed that comparison denominator enough that I do not want to sell this as a universal PyTorch-vs-MLX tail-collapse number. The stronger and simpler claim is that WiLoR-mini now has a native MLX runtime on Apple Silicon, with flat live sidecar latency low enough to build interaction on.
 
-(benchmarked on M4 Max, 40-core GPU, 128GB unified memory; MLX 0.31.2; PyTorch MPS row from 2.5.0 telemetry)
-
-The MLX p99 is faster than the PyTorch median. That flatness is
-the difference between a hand tracker that feels impressive in bursts and one that can plausibly act as an input device — MPS would mostly be fine, then randomly hitch and drop out from under me.
+That flatness is the difference between a hand tracker that feels impressive in bursts and one that can plausibly act as an input device.
 
 The reason appears to be mostly dispatch and synchronization, not memory copies: both routes sit on Apple Silicon unified memory. In this workload, PyTorch's eager MPS path exposes many per-op Metal submissions and sync boundaries that can block behind other GPU work. MLX builds a lazy graph and evaluates it in fewer, fused submissions. At least, that's where our traces pointed; the benchmark does not depend on that being the whole story.
 

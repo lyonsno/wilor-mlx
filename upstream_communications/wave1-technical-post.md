@@ -22,7 +22,8 @@ First run requires `torch` for a one-time conversion of MANO hand model data fro
 
 Performance on M4 Max (float32):
 
-- In our live hand-tracking sidecar, MLX holds flat ~61ms with virtually no tail — p99 is ~66ms (8% spread from median). That's the consistency you need to use 3D hand pose as a real-time control primitive, not just a batch inference model.
+- In our live hand-tracking sidecar, a clean post-reboot M4 Max smoke sits in the low-50ms range once warm and tracking. An earlier 500-frame stable window held at roughly p50/p90/p95/p99 = 61/62/63/66ms. That's the consistency you need to use 3D hand pose as a real-time control primitive, not just a batch inference model.
+- Historical PyTorch MPS telemetry from the same application motivated the port, but clean reruns moved the comparison denominator enough that we're not using the old tail history as a fresh universal PyTorch-vs-MLX headline.
 - Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than headline copy.
 
 Numerical fidelity: 0.006 max absolute diff on mesh vertices and hand keypoints — sub-millimeter, verified layer-by-layer against PyTorch through all 32 transformer blocks. The remaining divergence is float32 accumulation noise, not a port error.

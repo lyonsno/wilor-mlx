@@ -26,14 +26,13 @@ First run needs `torch` once for MANO conversion from the upstream WiLoR-mini ch
 
 ## Performance (M4 Max, float32)
 
-**Stable live sidecar window** (embedded in real-time hand tracking):
+The important measurement is the live sidecar route we actually use for interaction: camera frame → hand crop → WiLoR-mini pose/reconstruction → hand-pose event.
 
-| Backend | p50 | p90 | p95 | p99 |
-|---|---|---|---|---|
-| **MLX (wilor-mlx)** | **~61 ms** | **~62 ms** | **~63 ms** | **~66 ms** |
-| PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms | ~427 ms |
+On a clean post-reboot M4 Max smoke, the MLX sidecar sits in the low-50ms range once warm and tracking. An earlier 500-frame stable window held at roughly p50/p90/p95/p99 = 61/62/63/66ms.
 
-Flat ~61ms with virtually no tail — 8% spread from p50 to p99. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
+That flatness is the useful property: it makes 3D hand pose plausible as a real-time control primitive, not just a batch inference model. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
+
+Historical PyTorch MPS telemetry from the same application is what motivated the port; clean reruns moved the comparison denominator enough that we're not using the old tail history as a fresh universal PyTorch-vs-MLX headline.
 
 Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than headline copy.
 

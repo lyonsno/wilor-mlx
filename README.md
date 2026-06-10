@@ -6,18 +6,15 @@ A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) 
 
 ## Performance
 
-Tested on Apple M4 Max, single-image inference, float32:
+Tested on Apple M4 Max, single-image inference, float32.
 
-### Stable live sidecar window (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
+### Live sidecar behavior (embedded in [Perceptasia](https://github.com/lyonsno/perceptasia) hand tracking)
 
-| Backend | Model p50 | Model p90 | Model p95 | Model p99 |
-|---|---|---|---|---|
-| **MLX (wilor-mlx)** | **~61 ms** | **~62 ms** | **~63 ms** | **~66 ms** |
-| PyTorch MPS (2.5.0) | ~85 ms | ~144 ms | ~238 ms | ~427 ms |
+The strongest launch evidence is the route we actually use for interaction: camera frame → hand crop → WiLoR-mini pose/reconstruction sidecar → hand-pose event.
 
-**Flat ~61ms with virtually no tail** — only 8% spread from p50 to p99. That's the consistency you need for real-time interaction, not just batch inference. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
+On a clean post-reboot M4 Max smoke, the MLX sidecar sits in the low-50ms range once warm and tracking. An earlier 500-frame stable window held at roughly p50/p90/p95/p99 = 61/62/63/66ms. That flatness is the important property: it is the difference between a hand tracker that feels impressive in bursts and one that can plausibly act as an input device.
 
-MLX row: 500 consecutive frames from the current live sidecar during stable operation. MPS row: 102K-frame manifest history. Broader workstation telemetry with concurrent GPU workloads shows higher MLX tails — those reflect host contention, not model behavior.
+Historical PyTorch MPS telemetry from the same application is what motivated the port: the median could look acceptable while the tail still made the live control loop feel unreliable. We are not using that history as a fresh universal PyTorch-vs-MLX headline after clean reruns moved both denominators. The current public claim is narrower and stronger: WiLoR-mini now has a native MLX runtime on Apple Silicon, with live sidecar latency low enough to build interaction on.
 
 ### Why so consistent?
 
@@ -31,7 +28,7 @@ The repository includes a local benchmark harness for route checks and local rep
 python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz
 ```
 
-We are not using a paired isolated benchmark as the headline claim right now. The strongest current evidence is the live sidecar table above: it measures the route that actually matters for using hand pose as a real-time input primitive. Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than launch headline copy.
+We are not using a paired isolated benchmark as the headline claim right now. The strongest current evidence is the live sidecar route above: it measures the path that actually matters for using hand pose as a real-time input primitive. Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than launch headline copy.
 
 ## Install
 
