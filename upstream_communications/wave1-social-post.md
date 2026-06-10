@@ -11,12 +11,12 @@ Gate: operator approval required before posting
 
 Rebuilt WiLoR-mini 3D hand pose estimation end-to-end in MLX for Apple Silicon.
 
-Low-50ms live sidecar latency on M4 Max once warm and tracking. Sub-millimeter parity against PyTorch.
+~37ms model-stage latency on M4 Max, with sub-millimeter parity against PyTorch.
 
 One-line setup, no torch at inference time.
 
 GitHub: https://github.com/lyonsno/wilor-mlx
-Weights: https://huggingface.co/lyonsno/wilor-mlx
+Weights: https://huggingface.co/BasinShapers/wilor-mlx
 
 ---
 
@@ -24,9 +24,9 @@ Weights: https://huggingface.co/lyonsno/wilor-mlx
 
 Rebuilt WiLoR-mini — 3D hand pose estimation with ViT-H/16, MANO, and RefineNet — end-to-end in MLX for Apple Silicon.
 
-The real win is in live use: inside our hand-tracking sidecar, the clean post-reboot MLX route sits in the low-50ms range on M4 Max once warm and tracking. An earlier 500-frame stable window held at roughly 61/62/63/66ms for p50/p90/p95/p99. That consistency is what makes 3D hand pose viable as a real-time control primitive.
+The real win is in live use: inside our hand-tracking sidecar, the clean post-reboot M4 Max same-harness route puts MLX around 37ms median for the pose/reconstruction model stage versus 49ms for PyTorch MPS, and around 49ms versus 60ms for the full saved-frame route.
 
-Historical PyTorch MPS telemetry from the same application is what motivated the port, but clean reruns moved the comparison denominator enough that I'm not using the old tail history as today's headline.
+Older app-level PyTorch MPS telemetry is what motivated the port, but clean reruns moved the comparison denominator enough that I'm not using the old tail history as today's headline.
 
 Sub-millimeter geometric parity (0.006 max diff on mesh vertices), verified layer-by-layer through all 32 transformer blocks. Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead, but exact low-end numbers are being rebaselined after recent macOS/Metal changes.
 
@@ -35,4 +35,4 @@ Setup is one line — weights auto-download from Hugging Face, MANO data derives
 We couldn't find another public WiLoR MLX/CoreML port, so we're publishing this as a technical priority flag. Pointers to related work welcome.
 
 GitHub: https://github.com/lyonsno/wilor-mlx
-Weights: https://huggingface.co/lyonsno/wilor-mlx
+Weights: https://huggingface.co/BasinShapers/wilor-mlx

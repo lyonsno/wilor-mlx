@@ -15,9 +15,9 @@ So, like everybody who is occasionally feeling both imaginative and lazy, I star
 
 I went looking for hand tracking on Mac that could run at something close to real-time, and the best thing I found was WiLoR-mini. Since I'd already been working with MLX, I used it to rebuild the WiLoR-mini reconstruction model end-to-end — ViT-H/16 backbone, MANO hand model, and RefineNet — so the pose/reconstruction stage can run natively on Apple Silicon without PyTorch at inference time.
 
-It was not magic. But it did help. On my M4 Max, the live MLX sidecar now sits in the low-50ms range for the pose/reconstruction model once warm and tracking. That is the number I care about here: not a one-off batch benchmark, but the route that turns camera frames into hand-pose events for an actual interaction loop.
+It was not magic. But it did help. On my M4 Max, a clean same-harness smoke over recent Perceptasia saved frames puts the MLX pose/reconstruction model stage at about 37ms median versus 49ms for PyTorch MPS, and the full saved-frame route at about 49ms versus 60ms. That is the number I care about here: not a one-off batch benchmark, but the route that turns camera frames into hand-pose events for an actual interaction loop.
 
-I originally reached for MLX because the PyTorch MPS route in my app could be fine at the median and then throw enough tail latency to make the hand tracker feel unreliable. A clean rerun changed that comparison denominator enough that I do not want to sell this as a universal PyTorch-vs-MLX tail-collapse number. The stronger and simpler claim is that WiLoR-mini now has a native MLX runtime on Apple Silicon, with flat live sidecar latency low enough to build interaction on.
+I originally reached for MLX because older app-level telemetry around the PyTorch MPS route made the hand tracker feel less reliable than I wanted. Clean reruns changed that comparison denominator enough that I do not want to sell this as a universal PyTorch-vs-MLX tail-collapse number. The stronger and simpler claim is that WiLoR-mini now has a native MLX runtime on Apple Silicon, with live sidecar latency low enough to build interaction on.
 
 That flatness is the difference between a hand tracker that feels impressive in bursts and one that can plausibly act as an input device.
 

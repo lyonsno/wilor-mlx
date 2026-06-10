@@ -277,4 +277,4 @@ The hand, if you'll forgive the metaphor, is right there.
 
 ---
 
-*The source code is at [github.com/lyonsno/wilor-mlx](https://github.com/lyonsno/wilor-mlx). The weights are at [huggingface.co/lyonsno/wilor-mlx](https://huggingface.co/lyonsno/wilor-mlx). If you find a bug, you'll be the sixteenth reviewer, and based on the pattern so far, the bug will be at an abstraction boundary.*
+*The source code is at [github.com/lyonsno/wilor-mlx](https://github.com/lyonsno/wilor-mlx). The weights are at [huggingface.co/BasinShapers/wilor-mlx](https://huggingface.co/BasinShapers/wilor-mlx). If you find a bug, you'll be the sixteenth reviewer, and based on the pattern so far, the bug will be at an abstraction boundary.*

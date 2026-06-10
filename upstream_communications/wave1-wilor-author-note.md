@@ -12,7 +12,7 @@ Hi WiLoR team,
 I built and published an Apple Silicon MLX port of WiLoR-mini — the full inference pipeline including ViT-H/16 backbone, MANO with LBS, and RefineNet:
 
 GitHub: https://github.com/lyonsno/wilor-mlx
-Weights: https://huggingface.co/lyonsno/wilor-mlx
+Weights: https://huggingface.co/BasinShapers/wilor-mlx
 
 A few things I was careful about:
 

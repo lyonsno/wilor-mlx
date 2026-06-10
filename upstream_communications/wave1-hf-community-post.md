@@ -1,7 +1,7 @@
 # HuggingFace Community Post — wilor-mlx
 
 Status: final draft, pending operator go
-Surface: HuggingFace community post on lyonsno/wilor-mlx model page
+Surface: HuggingFace community post on BasinShapers/wilor-mlx model page
 Target: Tuesday 2026-06-09 12:00 ET
 Gate: operator approval required before posting
 
@@ -28,11 +28,11 @@ First run needs `torch` once for MANO conversion from the upstream WiLoR-mini ch
 
 The important measurement is the live sidecar route we actually use for interaction: camera frame → hand crop → WiLoR-mini pose/reconstruction → hand-pose event.
 
-On a clean post-reboot M4 Max smoke, the MLX sidecar sits in the low-50ms range once warm and tracking. An earlier 500-frame stable window held at roughly p50/p90/p95/p99 = 61/62/63/66ms.
+On a clean post-reboot M4 Max same-harness smoke over recent Perceptasia saved frames, MLX runs the pose/reconstruction model stage at about 37ms median versus 49ms for PyTorch MPS, and the full saved-frame route at about 49ms versus 60ms. That is roughly a 1.3x model-stage advantage and a 1.2x full-route advantage on the fair comparison denominator we trust most right now.
 
-That flatness is the useful property: it makes 3D hand pose plausible as a real-time control primitive, not just a batch inference model. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
+That latency is low enough to make 3D hand pose plausible as a real-time control primitive, not just a batch inference model. Our traces point to dispatch and synchronization as the main difference, not memory copies: both routes sit on Apple Silicon unified memory, but MLX's lazy graph gives the hot path fewer places for a hitch to land.
 
-Historical PyTorch MPS telemetry from the same application is what motivated the port; clean reruns moved the comparison denominator enough that we're not using the old tail history as a fresh universal PyTorch-vs-MLX headline.
+Older app-level PyTorch MPS telemetry is what motivated the port; clean reruns moved the comparison denominator enough that we're not using the old tail history as a fresh universal PyTorch-vs-MLX headline.
 
 Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than headline copy.
 
@@ -56,5 +56,5 @@ MANO is separately licensed by the Max Planck Institute. wilor-mlx does not bund
 ## Links
 
 - **Code:** https://github.com/lyonsno/wilor-mlx
-- **Weights:** https://huggingface.co/lyonsno/wilor-mlx
+- **Weights:** https://huggingface.co/BasinShapers/wilor-mlx
 - **Original:** [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) (Zhan et al., CVPR)

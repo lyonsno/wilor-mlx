@@ -12,9 +12,9 @@ Tested on Apple M4 Max, single-image inference, float32.
 
 The strongest launch evidence is the route we actually use for interaction: camera frame → hand crop → WiLoR-mini pose/reconstruction sidecar → hand-pose event.
 
-On a clean post-reboot M4 Max smoke, the MLX sidecar sits in the low-50ms range once warm and tracking. An earlier 500-frame stable window held at roughly p50/p90/p95/p99 = 61/62/63/66ms. That flatness is the important property: it is the difference between a hand tracker that feels impressive in bursts and one that can plausibly act as an input device.
+On a clean post-reboot M4 Max same-harness smoke over recent Perceptasia saved frames, MLX runs the pose/reconstruction model stage at about 37ms median versus 49ms for PyTorch MPS, and the full saved-frame route at about 49ms versus 60ms. That is roughly a 1.3x model-stage advantage and a 1.2x full-route advantage on the fair comparison denominator we trust most right now.
 
-Historical PyTorch MPS telemetry from the same application is what motivated the port: the median could look acceptable while the tail still made the live control loop feel unreliable. We are not using that history as a fresh universal PyTorch-vs-MLX headline after clean reruns moved both denominators. The current public claim is narrower and stronger: WiLoR-mini now has a native MLX runtime on Apple Silicon, with live sidecar latency low enough to build interaction on.
+Older app-level telemetry is what pushed us toward MLX in the first place, but clean reruns narrowed the comparison denominator enough that we are not using the old tail story as a fresh universal PyTorch-vs-MLX headline. The current public claim is narrower and stronger: WiLoR-mini now has a native MLX runtime on Apple Silicon, with live sidecar latency low enough to build interaction on.
 
 ### Why so consistent?
 
@@ -28,7 +28,7 @@ The repository includes a local benchmark harness for route checks and local rep
 python benchmarks/bench_wilor.py --backend mlx --weights weights/wilor-mlx.safetensors --mano-npz weights/mano.npz
 ```
 
-We are not using a paired isolated benchmark as the headline claim right now. The strongest current evidence is the live sidecar route above: it measures the path that actually matters for using hand pose as a real-time input primitive. Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than launch headline copy.
+We are not using the old app-tail telemetry as the headline claim right now. The strongest current evidence is the same-harness saved-frame route above: it measures the path that actually matters for using hand pose as a real-time input primitive while keeping the PyTorch MPS comparison on the same denominator. Lower-bandwidth M2 Pro/Tahoe validation also shows MLX ahead on archived hand-positive frames, but recent macOS/Metal changes moved both backends enough that we are treating exact M2 Pro numbers as rebaseline work rather than launch headline copy.
 
 ## Install
 
@@ -45,7 +45,7 @@ Requires macOS with Apple Silicon, Python 3.10+. MLX and other dependencies inst
 
 On the first call to `WiLoR.from_pretrained()`, wilor-mlx automatically:
 
-1. Downloads model weights from [HuggingFace](https://huggingface.co/lyonsno/wilor-mlx) (2.4 GB, cached locally)
+1. Downloads model weights from [HuggingFace](https://huggingface.co/BasinShapers/wilor-mlx) (2.4 GB, cached locally)
 2. Downloads MANO hand model data from the [WiLoR-mini](https://huggingface.co/warmshao/WiLoR-mini) checkpoint (requires `torch` for one-time conversion)
 3. Caches converted MANO data at `~/.cache/wilor-mlx/mano.npz`
 
@@ -53,7 +53,7 @@ After the first run, everything loads from cache and **torch is never used again
 
 The MANO hand model is licensed separately by the Max Planck Institute. We do not redistribute MANO data — it is downloaded from the original WiLoR-mini source and converted locally on your machine. See [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de/) for MANO license terms.
 
-Float32 and int4 weight variants are available on the [model card](https://huggingface.co/lyonsno/wilor-mlx). Both run at the same speed on Apple Silicon — at these sequence lengths (210 tokens) the model is compute-bound, not memory-bandwidth-bound, so smaller weights don't accelerate inference. Int4 is purely a deployment convenience (2.4 GB → 490 MB).
+Float32 and int4 weight variants are available on the [model card](https://huggingface.co/BasinShapers/wilor-mlx). Both run at the same speed on Apple Silicon — at these sequence lengths (210 tokens) the model is compute-bound, not memory-bandwidth-bound, so smaller weights don't accelerate inference. Int4 is purely a deployment convenience (2.4 GB → 490 MB).
 
 If you prefer to supply your own MANO data (e.g. obtained directly from [MPI](https://mano.is.tue.mpg.de/)), pass `mano_path=...` to `from_pretrained()`.
 
@@ -121,6 +121,6 @@ The port includes:
 
 ## License
 
-The wilor-mlx code and distributed weight files are MIT licensed. Our weights (on [HuggingFace](https://huggingface.co/lyonsno/wilor-mlx)) contain only ViT backbone, RefineNet, and learned embedding parameters — no MANO data is bundled or rehosted.
+The wilor-mlx code and distributed weight files are MIT licensed. Our weights (on [HuggingFace](https://huggingface.co/BasinShapers/wilor-mlx)) contain only ViT backbone, RefineNet, and learned embedding parameters — no MANO data is bundled or rehosted.
 
 The [MANO hand model](https://mano.is.tue.mpg.de/) is separately licensed by the Max Planck Institute. `WiLoR.from_pretrained()` fetches upstream [WiLoR-mini](https://huggingface.co/warmshao/WiLoR-mini) assets and converts MANO data locally on your machine. If you prefer to obtain MANO directly from MPI, pass `mano_path=...` to use your own copy.

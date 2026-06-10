@@ -19,7 +19,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/lyonsno/wilor-mlx"
 Repository = "https://github.com/lyonsno/wilor-mlx"
-"Model Card" = "https://huggingface.co/lyonsno/wilor-mlx"
+"Model Card" = "https://huggingface.co/BasinShapers/wilor-mlx"
 
 [project.optional-dependencies]
 dev = [

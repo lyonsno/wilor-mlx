@@ -121,7 +121,7 @@ class WiLoR:
 
         return pred_mano_params
 
-    HF_REPO_ID = "lyonsno/wilor-mlx"
+    HF_REPO_ID = "BasinShapers/wilor-mlx"
     HF_WEIGHTS_FILE = "wilor-mlx.safetensors"
     WILOR_MINI_REPO_ID = "warmshao/WiLoR-mini"
     MANO_CACHE_FILE = "mano.npz"
