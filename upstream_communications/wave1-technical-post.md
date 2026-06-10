@@ -3,7 +3,7 @@
 Status: final draft, pending operator go
 Channels: HuggingFace community post, MLX community, personal social
 Gate: operator approval required before any public posting
-Target: Tuesday 2026-06-09 12:00–13:00 ET
+Target: operator discretion after HF checkpoint/post
 
 ---
 

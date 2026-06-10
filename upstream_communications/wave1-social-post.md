@@ -2,7 +2,7 @@
 
 Status: final draft, pending operator go
 Surface: Twitter/X, LinkedIn
-Target: Tuesday 2026-06-09 ~12:30–13:00 ET (30-60 min after HF post)
+Target: operator discretion after HF checkpoint/post
 Gate: operator approval required before posting
 
 ---
