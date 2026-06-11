@@ -27,60 +27,85 @@ class HandPose:
     vertices: list[list[float]] | None = None  # 778 MANO mesh vertices
 
 
-def _nms(boxes, scores, iou_threshold: float = 0.5):
-    """Non-maximum suppression. boxes: (N, 4) xywh, scores: (N,)."""
-    if len(boxes) == 0:
-        return []
-    # Convert xywh to xyxy
-    x1 = boxes[:, 0] - boxes[:, 2] / 2
-    y1 = boxes[:, 1] - boxes[:, 3] / 2
-    x2 = boxes[:, 0] + boxes[:, 2] / 2
-    y2 = boxes[:, 1] + boxes[:, 3] / 2
+def _nms_mlx(boxes, scores, iou_threshold: float = 0.5):
+    """Non-maximum suppression on MLX arrays. boxes: (N, 4) xywh, scores: (N,).
 
+    Returns list of kept indices. Runs on CPU via numpy since candidate
+    count is typically <10 for hand detection.
+    """
+    boxes_np = np.array(boxes)
+    scores_np = np.array(scores)
+    if len(boxes_np) == 0:
+        return []
+
+    x1 = boxes_np[:, 0] - boxes_np[:, 2] / 2
+    y1 = boxes_np[:, 1] - boxes_np[:, 3] / 2
+    x2 = boxes_np[:, 0] + boxes_np[:, 2] / 2
+    y2 = boxes_np[:, 1] + boxes_np[:, 3] / 2
     areas = (x2 - x1) * (y2 - y1)
-    order = np.argsort(-scores)
+    order = np.argsort(-scores_np)
 
     keep = []
     while len(order) > 0:
         i = order[0]
-        keep.append(i)
+        keep.append(int(i))
         if len(order) == 1:
             break
-
         xx1 = np.maximum(x1[i], x1[order[1:]])
         yy1 = np.maximum(y1[i], y1[order[1:]])
         xx2 = np.minimum(x2[i], x2[order[1:]])
         yy2 = np.minimum(y2[i], y2[order[1:]])
-
         inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
         iou = inter / (areas[i] + areas[order[1:]] - inter + 1e-6)
-
-        mask = iou <= iou_threshold
-        order = order[1:][mask]
-
+        order = order[1:][iou <= iou_threshold]
     return keep
 
 
-def _crop_hand(image_np, bbox_xywh, scale: float = 2.5):
-    """Crop and resize hand region to 256x256 for WiLoR.
+def _crop_and_resize_mlx(image_mx, cx, cy, box_size, target_size=256):
+    """Crop and bilinear-resize a region from an MLX image to target_size.
 
-    Uses the same expansion and resize logic as WiLoR-mini's ViTDetDataset.
+    image_mx: (H, W, 3) uint8 MLX array.
+    Returns: (target_size, target_size, 3) uint8 MLX array.
     """
-    from PIL import Image
+    H, W = image_mx.shape[:2]
+    half = box_size / 2.0
 
-    H, W = image_np.shape[:2]
-    cx, cy, bw, bh = bbox_xywh
-    box_size = max(bw, bh) * scale / 2
+    # Sample grid in source image coordinates
+    t = mx.linspace(0.0, 1.0, target_size)
+    src_y = mx.array(float(cy - half)) + t * mx.array(float(2 * half))
+    src_x = mx.array(float(cx - half)) + t * mx.array(float(2 * half))
+    grid_y, grid_x = mx.meshgrid(src_y, src_x, indexing="ij")
 
-    x1 = int(max(0, cx - box_size))
-    y1 = int(max(0, cy - box_size))
-    x2 = int(min(W, cx + box_size))
-    y2 = int(min(H, cy + box_size))
+    # Clamp to valid range
+    grid_x = mx.clip(grid_x, 0, W - 1.001)
+    grid_y = mx.clip(grid_y, 0, H - 1.001)
 
-    crop = image_np[y1:y2, x1:x2]
-    img = Image.fromarray(crop)
-    img = img.resize((256, 256), Image.BILINEAR)
-    return np.array(img, dtype=np.uint8)
+    # Bilinear interpolation indices
+    x0 = grid_x.astype(mx.int32)
+    y0 = grid_y.astype(mx.int32)
+    x1 = mx.minimum(x0 + 1, W - 1)
+    y1 = mx.minimum(y0 + 1, H - 1)
+
+    # Fractional parts
+    fx = grid_x - x0.astype(mx.float32)
+    fy = grid_y - y0.astype(mx.float32)
+
+    # Gather corners (cast to float for interpolation)
+    img_f = image_mx.astype(mx.float32)
+    c00 = img_f[y0, x0]  # (target, target, 3)
+    c01 = img_f[y0, x1]
+    c10 = img_f[y1, x0]
+    c11 = img_f[y1, x1]
+
+    # Bilinear blend
+    fx = fx[..., None]
+    fy = fy[..., None]
+    out = (c00 * (1 - fx) * (1 - fy) +
+           c01 * fx * (1 - fy) +
+           c10 * (1 - fx) * fy +
+           c11 * fx * fy)
+
+    return out.astype(mx.uint8)
 
 
 class HandPosePipeline:
@@ -123,64 +148,68 @@ class HandPosePipeline:
         Returns:
             List of HandPose, one per detected hand.
         """
-        H, W = image.shape[:2]
+        if isinstance(image, np.ndarray):
+            image_mx = mx.array(image)
+        else:
+            image_mx = image
+        H, W = image_mx.shape[:2]
 
-        # Resize to 512x512 for detector
-        from PIL import Image as PILImage
-        det_img = PILImage.fromarray(image).resize((512, 512), PILImage.BILINEAR)
-        det_np = np.array(det_img, dtype=np.uint8)
+        # Resize to 512x512 for detector (MLX bilinear)
+        det_input = _crop_and_resize_mlx(image_mx, W / 2.0, H / 2.0,
+                                          max(H, W), target_size=512)
+        det_input = det_input[None]  # (1, 512, 512, 3)
 
-        # Run detector
-        det_input = mx.array(det_np[np.newaxis])  # (1, 512, 512, 3)
-        raw = self.detector(det_input)
-        mx.eval(raw)
-        pred = np.array(raw[0])  # (69, 5376)
+        # Run detector — stays on MLX
+        raw = self.detector(det_input)  # (1, 69, 5376)
 
-        # Parse detections
-        boxes_xywh = pred[:4].T  # (5376, 4)
-        cls_scores = pred[4:6].T  # (5376, 2) — left, right
-        kpts_raw = pred[6:].T  # (5376, 63)
-
-        # Best class per anchor
-        best_cls = np.argmax(cls_scores, axis=1)  # 0=left, 1=right
-        best_score = np.max(cls_scores, axis=1)
-
-        # Filter by confidence
+        # Parse on MLX: confidence filter
+        pred = raw[0]  # (69, 5376)
+        cls_scores = pred[4:6]  # (2, 5376)
+        best_score = mx.max(cls_scores, axis=0)  # (5376,)
         mask = best_score >= conf_threshold
-        if not mask.any():
+        mx.eval(mask)
+
+        # Pull only the filtered candidates to CPU for NMS (typically <10)
+        mask_np = np.array(mask)
+        if not mask_np.any():
             return []
 
-        boxes = boxes_xywh[mask]
-        scores = best_score[mask]
-        classes = best_cls[mask]
-        kpts = kpts_raw[mask].reshape(-1, 21, 3)
+        # Gather filtered candidates
+        indices = mx.array(np.where(mask_np)[0])
+        boxes_xywh = pred[:4, indices].T  # (N, 4)
+        filt_cls = cls_scores[:, indices].T  # (N, 2)
+        filt_scores = mx.max(filt_cls, axis=1)
+        filt_classes = mx.argmax(filt_cls, axis=1)
+        kpts_filt = pred[6:, indices].T  # (N, 63)
+        mx.eval(boxes_xywh, filt_scores, filt_classes, kpts_filt)
 
-        # NMS
-        keep = _nms(boxes, scores, iou_threshold)
+        # NMS on CPU (tiny candidate set)
+        keep = _nms_mlx(boxes_xywh, filt_scores, iou_threshold)
         if not keep:
             return []
 
-        # Scale boxes from 512x512 back to original image coords
-        sx, sy = W / 512.0, H / 512.0
+        # Scale factors from 512x512 detector space to original
+        sx, sy = float(W) / 512.0, float(H) / 512.0
+
+        # Convert kept results to numpy once
+        boxes_np = np.array(boxes_xywh)
+        scores_np = np.array(filt_scores)
+        classes_np = np.array(filt_classes)
+        kpts_np = np.array(kpts_filt).reshape(-1, 21, 3)
 
         results = []
         for idx in keep:
-            box = boxes[idx]
-            score = float(scores[idx])
-            hand_cls = int(classes[idx])
-            hand_side = "left" if hand_cls == 0 else "right"
-            det_kpts = kpts[idx]  # (21, 3) — x, y, visibility in 512x512
+            cx_d, cy_d, bw_d, bh_d = boxes_np[idx]
+            score = float(scores_np[idx])
+            hand_side = "left" if int(classes_np[idx]) == 0 else "right"
+            det_kpts = kpts_np[idx]
 
-            # Scale bbox to original
-            cx, cy, bw, bh = box
             bbox_orig = [
-                float((cx - bw / 2) * sx),
-                float((cy - bh / 2) * sy),
-                float((cx + bw / 2) * sx),
-                float((cy + bh / 2) * sy),
+                float((cx_d - bw_d / 2) * sx),
+                float((cy_d - bh_d / 2) * sy),
+                float((cx_d + bw_d / 2) * sx),
+                float((cy_d + bh_d / 2) * sy),
             ]
-
-            # Scale detector keypoints to original
             kp2d = [[float(det_kpts[j, 0] * sx), float(det_kpts[j, 1] * sy)]
                     for j in range(21)]
 
@@ -188,22 +217,24 @@ class HandPosePipeline:
             verts = None
 
             if include_3d or include_vertices:
-                # Crop hand for WiLoR
-                bbox_orig_xywh = [cx * sx, cy * sy, bw * sx, bh * sy]
-                crop = _crop_hand(image, bbox_orig_xywh, scale=2.5)
+                # Crop hand in MLX — scale bbox to original coords
+                cx_o = cx_d * sx
+                cy_o = cy_d * sy
+                box_size = max(bw_d * sx, bh_d * sy) * 2.5
+                crop = _crop_and_resize_mlx(image_mx, cx_o, cy_o, box_size,
+                                             target_size=256)
 
                 # Flip left hands (WiLoR is MANO_RIGHT)
                 if hand_side == "left":
-                    crop = crop[:, ::-1].copy()
+                    crop = crop[:, ::-1]
 
-                crop_mx = mx.array(crop[np.newaxis])  # (1, 256, 256, 3)
-                wilor_out = self.pose_model(crop_mx)
+                wilor_out = self.pose_model(crop[None])
                 mx.eval(wilor_out)
 
                 if include_3d:
                     kp3d_arr = np.array(wilor_out["pred_keypoints_3d"][0])
                     if hand_side == "left":
-                        kp3d_arr[:, 0] = -kp3d_arr[:, 0]  # flip x back
+                        kp3d_arr[:, 0] = -kp3d_arr[:, 0]
                     kp3d = kp3d_arr.tolist()
 
                 if include_vertices:
