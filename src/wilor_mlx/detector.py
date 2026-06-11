@@ -13,7 +13,6 @@ import math
 
 import mlx.core as mx
 import mlx.nn as nn
-import numpy as np
 
 
 # ---------------------------------------------------------------------------
@@ -122,20 +121,15 @@ class DFL(nn.Module):
 
     def __init__(self, c1: int = 16):
         super().__init__()
-        self.conv = nn.Conv2d(c1, 1, kernel_size=1, bias=False)
-        # Weight is fixed arange, not learned
-        self.conv.weight = mx.arange(c1, dtype=mx.float32).reshape(1, 1, 1, c1)
         self.c1 = c1
+        self._weights = mx.arange(c1, dtype=mx.float32).reshape(1, 1, c1, 1)
 
     def __call__(self, x):
         """x: (B, 4 * reg_max, A) -> (B, 4, A)"""
         B, channels, A = x.shape
-        # Reshape to (B, 4, reg_max, A), softmax over reg_max, weighted sum
         x = x.reshape(B, 4, self.c1, A)
         x = mx.softmax(x, axis=2)
-        # Weighted sum: multiply by [0, 1, ..., reg_max-1]
-        weights = mx.arange(self.c1, dtype=mx.float32).reshape(1, 1, self.c1, 1)
-        return (x * weights).sum(axis=2)  # (B, 4, A)
+        return (x * self._weights).sum(axis=2)
 
 
 # ---------------------------------------------------------------------------
@@ -187,17 +181,17 @@ class Pose(nn.Module):
             # Bbox branch
             box = feat
             for layer in self.cv2[i]:
-                box = layer(box) if not isinstance(layer, nn.Conv2d) else layer(box)
+                box = layer(box)
 
             # Class branch
             cls = feat
             for layer in self.cv3[i]:
-                cls = layer(cls) if not isinstance(layer, nn.Conv2d) else layer(cls)
+                cls = layer(cls)
 
             # Keypoint branch
             kpt = feat
             for layer in self.cv4[i]:
-                kpt = layer(kpt) if not isinstance(layer, nn.Conv2d) else layer(kpt)
+                kpt = layer(kpt)
 
             B, H, W, _ = box.shape
             # Flatten spatial dims: (B, H*W, C) then transpose to (B, C, H*W)
@@ -218,11 +212,14 @@ class Pose(nn.Module):
         # Sigmoid on class scores
         all_cls = mx.sigmoid(all_cls)
 
+        # Compute anchors once for both decode paths
+        anchors, strides = self._make_anchors(features)
+
         # Anchor generation and bbox decode
-        box_decoded = self._decode_bboxes(box_decoded, features)
+        box_decoded = self._decode_bboxes(box_decoded, anchors, strides)
 
         # Decode keypoints
-        all_kpt = self._decode_kpts(all_kpt, features)
+        all_kpt = self._decode_kpts(all_kpt, anchors, strides)
 
         return mx.concatenate([box_decoded, all_cls, all_kpt], axis=1)
 
@@ -242,9 +239,8 @@ class Pose(nn.Module):
             strides.append(mx.full((H * W, 1), s))
         return mx.concatenate(anchors, axis=0), mx.concatenate(strides, axis=0)
 
-    def _decode_bboxes(self, box, features):
+    def _decode_bboxes(self, box, anchors, strides):
         """Decode DFL output to xywh bboxes in pixel coords."""
-        anchors, strides = self._make_anchors(features)
         # anchors: (A, 2), strides: (A, 1)
         # box: (B, 4, A) — dist2bbox format (left, top, right, bottom distances)
         # Decode: center = anchor * stride, wh from distances
@@ -264,9 +260,8 @@ class Pose(nn.Module):
         h = x2y2[:, 1:2, :] - x1y1[:, 1:2, :]
         return mx.concatenate([cx, cy, w, h], axis=1)
 
-    def _decode_kpts(self, kpt, features):
+    def _decode_kpts(self, kpt, anchors, strides):
         """Decode keypoint predictions to pixel coordinates."""
-        anchors, strides = self._make_anchors(features)
         B = kpt.shape[0]
         A = kpt.shape[2]
         # kpt: (B, 63, A) -> (B, 21, 3, A)
@@ -391,9 +386,13 @@ def _upsample_nearest(x, scale: int = 2):
 
 def _load_detector_weights(model, weights_path):
     """Load safetensors weights into the MLX detector model."""
+    import logging
     import safetensors.numpy
+
+    logger = logging.getLogger(__name__)
 
     arrays = safetensors.numpy.load_file(weights_path)
     weights = {k: mx.array(v) for k, v in arrays.items()}
     model.load_weights(list(weights.items()), strict=False)
     model.eval()  # use running stats for BatchNorm, not batch stats
+    logger.info("Loaded %d arrays from %s", len(arrays), weights_path)
