@@ -263,7 +263,7 @@ class TestPipelineMocked:
             pred[8 + j * 3, 0] = 0.9  # visibility
         return mx.array(pred[np.newaxis])  # (1, 69, A)
 
-    def test_pipeline_returns_hand_pose(self):
+    def test_pipeline_returns_hand_pose_and_verifies_wilor_input(self):
         from wilor_mlx.pipeline import HandPosePipeline
 
         mock_det = MagicMock()
@@ -289,6 +289,11 @@ class TestPipelineMocked:
         assert h.keypoints_3d is not None
         assert len(h.keypoints_3d) == 21
 
+        # Verify WiLoR received a (1, 256, 256, 3) crop
+        mock_wilor.assert_called_once()
+        wilor_input = mock_wilor.call_args[0][0]
+        assert wilor_input.shape == (1, 256, 256, 3)
+
     def test_pipeline_no_detections(self):
         from wilor_mlx.pipeline import HandPosePipeline
 
@@ -300,30 +305,33 @@ class TestPipelineMocked:
         assert hands == []
 
     def test_pipeline_non_square_coordinate_scaling(self):
-        """Detections on non-square images have correct coordinate offset."""
+        """Detections on non-square images have correct letterbox offset."""
         from wilor_mlx.pipeline import HandPosePipeline
 
-        # Detection at center of 512x512 detector space
         mock_det = MagicMock()
         mock_det.return_value = self._make_mock_detector_output(
             256, 256, 80, 80, cls_idx=1, conf=0.8
         )
 
         pipeline = HandPosePipeline(mock_det, MagicMock())
-        # 300x500 image: max=500, scale=500/512, ox=0, oy=100
+        # 300x500 image: max=500, scale=500/512, ox=0, oy=(500-300)/2=100
+        H, W = 300, 500
+        scale = max(H, W) / 512.0
+        oy = (max(H, W) - H) / 2.0
+        expected_cx = 256 * scale  # ox=0 for landscape
+        expected_cy = 256 * scale - oy
+
         hands = pipeline(
-            np.zeros((300, 500, 3), dtype=np.uint8),
+            np.zeros((H, W, 3), dtype=np.uint8),
             conf_threshold=0.3, include_3d=False,
         )
         assert len(hands) == 1
-        h = hands[0]
-        # Center of detection should map to ~(250 - 0, 250 - 100) = (250, 150)
-        bbox_cx = (h.bbox[0] + h.bbox[2]) / 2
-        bbox_cy = (h.bbox[1] + h.bbox[3]) / 2
-        assert 220 < bbox_cx < 280, f"bbox cx {bbox_cx:.0f} not near 250"
-        assert 120 < bbox_cy < 180, f"bbox cy {bbox_cy:.0f} not near 150"
+        bbox_cx = (hands[0].bbox[0] + hands[0].bbox[2]) / 2
+        bbox_cy = (hands[0].bbox[1] + hands[0].bbox[3]) / 2
+        assert bbox_cx == pytest.approx(expected_cx, abs=2)
+        assert bbox_cy == pytest.approx(expected_cy, abs=2)
 
-    def test_pipeline_left_hand_detected(self):
+    def test_pipeline_left_hand_with_vertices(self):
         from wilor_mlx.pipeline import HandPosePipeline
 
         mock_det = MagicMock()
@@ -340,9 +348,42 @@ class TestPipelineMocked:
         pipeline = HandPosePipeline(mock_det, mock_wilor)
         hands = pipeline(
             np.zeros((512, 512, 3), dtype=np.uint8),
-            include_3d=True, conf_threshold=0.5,
+            include_3d=True, include_vertices=True, conf_threshold=0.5,
         )
         assert len(hands) == 1
         assert hands[0].hand_side == "left"
         # 3D keypoints x should be negated for left hand flip-back
         assert hands[0].keypoints_3d[0][0] == pytest.approx(-1.0)
+        # Vertices x should also be negated
+        assert hands[0].vertices is not None
+        assert len(hands[0].vertices) == 778
+        assert hands[0].vertices[0][0] == pytest.approx(-1.0)
+
+    def test_pipeline_two_hands(self):
+        """Two non-overlapping detections (left + right) both returned."""
+        from wilor_mlx.pipeline import HandPosePipeline
+
+        A = 5376
+        pred = np.zeros((69, A), dtype=np.float32)
+        # Hand 1: right, at (150, 256)
+        pred[0, 0] = 150; pred[1, 0] = 256; pred[2, 0] = 80; pred[3, 0] = 80
+        pred[5, 0] = 0.9  # cls 1 = right
+        for j in range(21):
+            pred[6 + j * 3, 0] = 150; pred[7 + j * 3, 0] = 256; pred[8 + j * 3, 0] = 0.8
+        # Hand 2: left, at (350, 256)
+        pred[0, 1] = 350; pred[1, 1] = 256; pred[2, 1] = 80; pred[3, 1] = 80
+        pred[4, 1] = 0.85  # cls 0 = left
+        for j in range(21):
+            pred[6 + j * 3, 1] = 350; pred[7 + j * 3, 1] = 256; pred[8 + j * 3, 1] = 0.8
+
+        mock_det = MagicMock()
+        mock_det.return_value = mx.array(pred[np.newaxis])
+
+        pipeline = HandPosePipeline(mock_det, MagicMock())
+        hands = pipeline(
+            np.zeros((512, 512, 3), dtype=np.uint8),
+            conf_threshold=0.3, include_3d=False,
+        )
+        assert len(hands) == 2
+        sides = {h.hand_side for h in hands}
+        assert sides == {"left", "right"}
