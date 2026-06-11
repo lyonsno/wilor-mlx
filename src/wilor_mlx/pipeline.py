@@ -70,15 +70,15 @@ def _crop_and_resize_mlx(image_mx, cx, cy, box_size, target_size=256):
     H, W = image_mx.shape[:2]
     half = box_size / 2.0
 
-    # Sample grid in source image coordinates
-    t = mx.linspace(0.0, 1.0, target_size)
+    # Sample grid at pixel centers: maps output pixel i to source (start + (i+0.5)/N * size)
+    t = (mx.arange(target_size, dtype=mx.float32) + 0.5) / target_size
     src_y = mx.array(float(cy - half)) + t * mx.array(float(2 * half))
     src_x = mx.array(float(cx - half)) + t * mx.array(float(2 * half))
     grid_y, grid_x = mx.meshgrid(src_y, src_x, indexing="ij")
 
-    # Clamp to valid range
-    grid_x = mx.clip(grid_x, 0, W - 1.001)
-    grid_y = mx.clip(grid_y, 0, H - 1.001)
+    # Clamp to valid pixel range
+    grid_x = mx.clip(grid_x, 0, W - 1 - 1e-6)
+    grid_y = mx.clip(grid_y, 0, H - 1 - 1e-6)
 
     # Bilinear interpolation indices
     x0 = grid_x.astype(mx.int32)
@@ -188,8 +188,13 @@ class HandPosePipeline:
         if not keep:
             return []
 
-        # Scale factors from 512x512 detector space to original
-        sx, sy = float(W) / 512.0, float(H) / 512.0
+        # Scale from 512x512 detector space to original image coords.
+        # The detector input is a max(H,W)-square letterbox resized to 512x512,
+        # so the mapping is uniform scale + offset for non-square images.
+        img_size = max(float(H), float(W))
+        scale = img_size / 512.0
+        ox = (img_size - float(W)) / 2.0  # x offset from letterbox
+        oy = (img_size - float(H)) / 2.0  # y offset from letterbox
 
         # Convert kept results to numpy once
         boxes_np = np.array(boxes_xywh)
@@ -204,23 +209,28 @@ class HandPosePipeline:
             hand_side = "left" if int(classes_np[idx]) == 0 else "right"
             det_kpts = kpts_np[idx]
 
+            # Map from detector space to original image: x_orig = x_det * scale - ox
+            cx_o = cx_d * scale - ox
+            cy_o = cy_d * scale - oy
+            bw_o = bw_d * scale
+            bh_o = bh_d * scale
+
             bbox_orig = [
-                float((cx_d - bw_d / 2) * sx),
-                float((cy_d - bh_d / 2) * sy),
-                float((cx_d + bw_d / 2) * sx),
-                float((cy_d + bh_d / 2) * sy),
+                float(cx_o - bw_o / 2),
+                float(cy_o - bh_o / 2),
+                float(cx_o + bw_o / 2),
+                float(cy_o + bh_o / 2),
             ]
-            kp2d = [[float(det_kpts[j, 0] * sx), float(det_kpts[j, 1] * sy)]
+            kp2d = [[float(det_kpts[j, 0] * scale - ox),
+                     float(det_kpts[j, 1] * scale - oy)]
                     for j in range(21)]
 
             kp3d = None
             verts = None
 
             if include_3d or include_vertices:
-                # Crop hand in MLX — scale bbox to original coords
-                cx_o = cx_d * sx
-                cy_o = cy_d * sy
-                box_size = max(bw_d * sx, bh_d * sy) * 2.5
+                # Crop hand in original image coords
+                box_size = max(bw_o, bh_o) * 2.5
                 crop = _crop_and_resize_mlx(image_mx, cx_o, cy_o, box_size,
                                              target_size=256)
 
