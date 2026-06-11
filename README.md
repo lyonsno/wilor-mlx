@@ -35,10 +35,16 @@ We are not using the old app-tail telemetry as the headline claim right now. The
 ## Install
 
 ```bash
+pip install wilor-mlx
+pip install torch  # needed once for first-run MANO conversion, not used after
+```
+
+Or from source:
+
+```bash
 git clone https://github.com/lyonsno/wilor-mlx
 cd wilor-mlx
 pip install -e .
-pip install torch  # needed once for first-run MANO conversion, not used after
 ```
 
 Requires macOS with Apple Silicon, Python 3.10+. MLX and other dependencies install automatically.
