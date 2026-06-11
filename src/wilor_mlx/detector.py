@@ -246,7 +246,7 @@ class Pose(nn.Module):
         # anchor centers in pixel space
         ac = (anchors * strides.squeeze(-1).reshape(-1, 1)).T  # (2, A)
         ac = ac[None, :, :]  # (1, 2, A)
-        s = strides.squeeze(-1).T[None, :]  # (1, 1, A)
+        s = strides.squeeze(-1).T[None, :]  # (1, A)
 
         x1y1 = ac - lt * s
         x2y2 = ac + rb * s
