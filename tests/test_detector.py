@@ -141,12 +141,20 @@ class TestNumericalParity:
 
     @pytest.fixture(scope="class")
     def mlx_output(self):
-        """Run MLX model on same deterministic input."""
+        """Run MLX model on same deterministic input as PyTorch reference.
+
+        The PyTorch reference was generated with seed(42) in NCHW (1,3,512,512).
+        We generate the same NCHW data and transpose to NHWC for MLX.
+        """
         from wilor_mlx.detector import HandDetector
 
-        model = HandDetector.from_pretrained()
+        from wilor_mlx.detector import _load_detector_weights
+
+        model = HandDetector()
+        _load_detector_weights(model, "/tmp/hand-detector-v3.safetensors")
         np.random.seed(42)
-        x_np = np.random.randint(0, 256, (1, 512, 512, 3), dtype=np.uint8)
+        x_nchw = np.random.randint(0, 256, (1, 3, 512, 512), dtype=np.uint8)
+        x_np = np.transpose(x_nchw, (0, 2, 3, 1))  # NHWC for MLX
         x = mx.array(x_np)
         out = model(x)
         mx.eval(out)

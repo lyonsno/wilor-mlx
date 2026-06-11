@@ -35,7 +35,7 @@ class Conv(nn.Module):
         super().__init__()
         p = _autopad(k, p)
         self.conv = nn.Conv2d(c1, c2, kernel_size=k, stride=s, padding=p, bias=False)
-        self.bn = nn.BatchNorm(c2, momentum=0.1, eps=1e-5)
+        self.bn = nn.BatchNorm(c2, momentum=0.03, eps=1e-3)
 
     def __call__(self, x):
         return nn.silu(self.bn(self.conv(x)))
@@ -271,10 +271,10 @@ class Pose(nn.Module):
         A = kpt.shape[2]
         # kpt: (B, 63, A) -> (B, 21, 3, A)
         kpt = kpt.reshape(B, 21, 3, A)
-        # xy: decode relative to anchor, visibility: sigmoid
-        ac = (anchors * strides.squeeze(-1).reshape(-1, 1)).T  # (2, A)
+        # xy: decode relative to anchor (subtract 0.5 to match PyTorch convention)
+        # PyTorch: (raw * 2.0 + (anchor - 0.5)) * stride
+        ac = ((anchors - 0.5) * strides.squeeze(-1).reshape(-1, 1)).T  # (2, A)
         s = strides.squeeze(-1).T  # (1, A)
-        # x, y decoded
         kpt_x = (kpt[:, :, 0, :] * 2.0 * s[None, None, :] + ac[None, 0:1, :])
         kpt_y = (kpt[:, :, 1, :] * 2.0 * s[None, None, :] + ac[None, 1:2, :])
         kpt_v = mx.sigmoid(kpt[:, :, 2, :])
@@ -396,3 +396,4 @@ def _load_detector_weights(model, weights_path):
     arrays = safetensors.numpy.load_file(weights_path)
     weights = {k: mx.array(v) for k, v in arrays.items()}
     model.load_weights(list(weights.items()), strict=False)
+    model.eval()  # use running stats for BatchNorm, not batch stats
