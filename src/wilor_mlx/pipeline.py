@@ -61,10 +61,13 @@ def _nms_mlx(boxes, scores, iou_threshold: float = 0.5):
     return keep
 
 
-def _crop_and_resize_mlx(image_mx, cx, cy, box_size, target_size=256):
+def _crop_and_resize_mlx(image_mx, cx, cy, box_size, target_size=256,
+                         pad_value: int | None = None):
     """Crop and bilinear-resize a region from an MLX image to target_size.
 
     image_mx: (H, W, 3) uint8 MLX array.
+    pad_value: if set, out-of-bounds pixels use this value instead of edge clamping.
+               Use 114 for YOLO detector letterbox convention.
     Returns: (target_size, target_size, 3) uint8 MLX array.
     """
     H, W = image_mx.shape[:2]
@@ -76,7 +79,11 @@ def _crop_and_resize_mlx(image_mx, cx, cy, box_size, target_size=256):
     src_x = mx.array(float(cx - half)) + t * mx.array(float(2 * half))
     grid_y, grid_x = mx.meshgrid(src_y, src_x, indexing="ij")
 
-    # Clamp to valid pixel range
+    # Track out-of-bounds mask before clamping
+    if pad_value is not None:
+        oob = (grid_x < 0) | (grid_x > W - 1) | (grid_y < 0) | (grid_y > H - 1)
+
+    # Clamp to valid pixel range for gather
     grid_x = mx.clip(grid_x, 0, W - 1 - 1e-6)
     grid_y = mx.clip(grid_y, 0, H - 1 - 1e-6)
 
@@ -104,6 +111,10 @@ def _crop_and_resize_mlx(image_mx, cx, cy, box_size, target_size=256):
            c01 * fx * (1 - fy) +
            c10 * (1 - fx) * fy +
            c11 * fx * fy)
+
+    # Replace out-of-bounds pixels with pad value
+    if pad_value is not None:
+        out = mx.where(oob[..., None], mx.array(float(pad_value)), out)
 
     return out.astype(mx.uint8)
 
@@ -154,9 +165,10 @@ class HandPosePipeline:
             image_mx = image
         H, W = image_mx.shape[:2]
 
-        # Resize to 512x512 for detector (MLX bilinear)
+        # Letterbox to 512x512 for detector (gray pad, matching YOLO training)
         det_input = _crop_and_resize_mlx(image_mx, W / 2.0, H / 2.0,
-                                          max(H, W), target_size=512)
+                                          max(H, W), target_size=512,
+                                          pad_value=114)
         det_input = det_input[None]  # (1, 512, 512, 3)
 
         # Run detector — stays on MLX
