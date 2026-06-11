@@ -1,16 +1,18 @@
-"""Tests for YOLOv8m-pose hand detector MLX port.
+"""Tests for YOLOv8m-pose hand detector and hand pose pipeline.
 
 Verifies:
-1. Module imports and model construction
-2. Building block output shapes (Conv, C2f, SPPF)
-3. Full model output shape: [B, 69, 5376] for 512x512 input
+1. Building block construction and forward pass (non-zero input)
+2. Full model output shape and channel layout
+3. Weight loading from HuggingFace
 4. Numerical parity with PyTorch reference
-5. Weight loading from converted safetensors
+5. Pipeline: NMS, crop-and-resize, coordinate transforms, mocked end-to-end
 """
 
 import os
 import platform
 import sys
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import mlx.core as mx
 import numpy as np
@@ -23,88 +25,64 @@ pytestmark = pytest.mark.skipif(
 
 
 # ---------------------------------------------------------------------------
-# 1. Module import and model construction
+# 1. Building blocks
 # ---------------------------------------------------------------------------
 
 
-class TestDetectorConstruction:
-    """Verify detector module imports and model builds."""
+class TestBuildingBlocks:
+    """Verify detector building blocks produce correct shapes on non-zero input."""
 
-    def test_import_detector_module(self):
-        from wilor_mlx import detector  # noqa: F401
-
-    def test_construct_conv_block(self):
+    def test_conv_block(self):
         from wilor_mlx.detector import Conv
 
         conv = Conv(c1=3, c2=48, k=3, s=2)
-        x = mx.zeros((1, 64, 64, 3))
+        x = mx.ones((1, 64, 64, 3))
         out = conv(x)
         assert out.shape == (1, 32, 32, 48)
 
-    def test_construct_c2f_block(self):
+    def test_c2f_block(self):
         from wilor_mlx.detector import C2f
 
         c2f = C2f(c1=96, c2=96, n=2, shortcut=True)
-        x = mx.zeros((1, 32, 32, 96))
+        x = mx.ones((1, 32, 32, 96))
         out = c2f(x)
         assert out.shape == (1, 32, 32, 96)
 
-    def test_construct_sppf_block(self):
+    def test_sppf_block(self):
         from wilor_mlx.detector import SPPF
 
         sppf = SPPF(c1=576, c2=576, k=5)
-        x = mx.zeros((1, 16, 16, 576))
+        x = mx.ones((1, 16, 16, 576))
         out = sppf(x)
         assert out.shape == (1, 16, 16, 576)
 
-    def test_construct_full_model_output_shape(self):
-        from wilor_mlx.detector import HandDetector
-
-        model = HandDetector()
-        x = mx.zeros((1, 512, 512, 3), dtype=mx.uint8)
-        out = model(x)
-        assert out.shape == (1, 69, 5376)
-
 
 # ---------------------------------------------------------------------------
-# 2. Full model output shape
+# 2. Full model output
 # ---------------------------------------------------------------------------
 
 
-class TestDetectorOutputShape:
+class TestDetectorOutput:
     """Verify model produces correct output dimensions."""
 
-    def test_output_shape_512(self):
-        """512x512 input -> [B, 69, 5376] output."""
+    def test_output_shape_and_channels(self):
+        """512x512 input -> [B, nc+4+nk, A] with correct channel breakdown."""
         from wilor_mlx.detector import HandDetector
 
         model = HandDetector()
-        x = mx.zeros((1, 512, 512, 3), dtype=mx.uint8)
+        x = mx.ones((1, 512, 512, 3), dtype=mx.uint8)
         out = model(x)
-        # 69 = 4 (bbox xywh) + 2 (left/right class) + 63 (21 kpts * 3)
-        # 5376 = sum of 3 FPN detection grids
         assert out.shape == (1, 69, 5376)
+        # Verify channels match model config
+        assert out.shape[1] == 4 + model.pose.nc + model.pose.nk
 
-    def test_output_shape_batch(self):
-        """Batch dimension is preserved."""
+    def test_batch_dimension_preserved(self):
         from wilor_mlx.detector import HandDetector
 
         model = HandDetector()
-        x = mx.zeros((2, 512, 512, 3), dtype=mx.uint8)
+        x = mx.ones((2, 512, 512, 3), dtype=mx.uint8)
         out = model(x)
-        assert out.shape[0] == 2
-        assert out.shape[1] == 69
-
-    def test_output_channels_breakdown(self):
-        """Output has 4 bbox + 2 class + 63 keypoint channels."""
-        from wilor_mlx.detector import HandDetector
-
-        model = HandDetector()
-        x = mx.zeros((1, 512, 512, 3), dtype=mx.uint8)
-        out = model(x)
-        nc = 2  # left, right
-        nk = 21 * 3  # 21 keypoints, each (x, y, visibility)
-        assert out.shape[1] == 4 + nc + nk
+        assert out.shape == (2, 69, 5376)
 
 
 # ---------------------------------------------------------------------------
@@ -117,11 +95,10 @@ class TestWeightLoading:
     """Verify weights can be loaded from HuggingFace."""
 
     def test_from_pretrained_loads(self):
-        """from_pretrained returns a working model with correct output shape."""
         from wilor_mlx.detector import HandDetector
 
         model = HandDetector.from_pretrained()
-        x = mx.zeros((1, 512, 512, 3), dtype=mx.uint8)
+        x = mx.ones((1, 512, 512, 3), dtype=mx.uint8)
         out = model(x)
         assert out.shape == (1, 69, 5376)
 
@@ -144,14 +121,12 @@ class TestNumericalParity:
 
     @pytest.fixture(scope="class")
     def reference_output(self):
-        """Load saved PyTorch reference output."""
         ref = np.load(_REF_OUTPUT_PATH)
         assert ref.shape == (69, 5376)
         return ref
 
     @pytest.fixture(scope="class")
     def mlx_output(self):
-        """Run MLX model on same deterministic input as PyTorch reference."""
         from wilor_mlx.detector import HandDetector, _load_detector_weights
 
         model = HandDetector()
@@ -159,8 +134,7 @@ class TestNumericalParity:
         np.random.seed(42)
         x_nchw = np.random.randint(0, 256, (1, 3, 512, 512), dtype=np.uint8)
         x_np = np.transpose(x_nchw, (0, 2, 3, 1))
-        x = mx.array(x_np)
-        out = model(x)
+        out = model(mx.array(x_np))
         mx.eval(out)
         return np.array(out[0])
 
@@ -168,92 +142,94 @@ class TestNumericalParity:
         assert mlx_output.shape == reference_output.shape
 
     def test_bbox_parity(self, reference_output, mlx_output):
-        """Bounding box predictions within tolerance."""
-        ref_bbox = reference_output[:4, :]
-        mlx_bbox = mlx_output[:4, :]
-        max_diff = np.abs(ref_bbox - mlx_bbox).max()
-        assert max_diff < 1.0, f"bbox max diff {max_diff:.4f} exceeds 1.0 pixel"
+        max_diff = np.abs(reference_output[:4] - mlx_output[:4]).max()
+        assert max_diff < 1.0, f"bbox max diff {max_diff:.4f}"
 
     def test_class_score_parity(self, reference_output, mlx_output):
-        """Class scores within tolerance."""
-        ref_cls = reference_output[4:6, :]
-        mlx_cls = mlx_output[4:6, :]
-        max_diff = np.abs(ref_cls - mlx_cls).max()
-        assert max_diff < 0.01, f"class score max diff {max_diff:.6f} exceeds 0.01"
+        max_diff = np.abs(reference_output[4:6] - mlx_output[4:6]).max()
+        assert max_diff < 0.01, f"class score max diff {max_diff:.6f}"
 
-    def test_keypoint_parity(self, reference_output, mlx_output):
-        """Keypoint predictions within tolerance."""
-        ref_kps = reference_output[6:, :]
-        mlx_kps = mlx_output[6:, :]
-        max_diff = np.abs(ref_kps - mlx_kps).max()
-        assert max_diff < 1.0, f"keypoint max diff {max_diff:.4f} exceeds 1.0"
+    def test_keypoint_spatial_parity(self, reference_output, mlx_output):
+        """Keypoint x/y coordinates within tolerance."""
+        ref_kps = reference_output[6:].reshape(21, 3, -1)
+        mlx_kps = mlx_output[6:].reshape(21, 3, -1)
+        spatial_diff = np.abs(ref_kps[:, :2] - mlx_kps[:, :2]).max()
+        assert spatial_diff < 1.0, f"keypoint spatial max diff {spatial_diff:.4f}"
+
+    def test_keypoint_visibility_parity(self, reference_output, mlx_output):
+        """Keypoint visibility scores (sigmoid) within tight tolerance."""
+        ref_kps = reference_output[6:].reshape(21, 3, -1)
+        mlx_kps = mlx_output[6:].reshape(21, 3, -1)
+        vis_diff = np.abs(ref_kps[:, 2] - mlx_kps[:, 2]).max()
+        assert vis_diff < 0.01, f"keypoint visibility max diff {vis_diff:.6f}"
 
 
 # ---------------------------------------------------------------------------
-# 5. Pipeline unit tests
+# 5. Pipeline: NMS
 # ---------------------------------------------------------------------------
 
 
 class TestNMS:
-    """Verify NMS implementation."""
-
-    def test_nms_suppresses_overlapping_boxes(self):
+    def test_suppresses_overlapping(self):
         from wilor_mlx.pipeline import _nms_mlx
 
-        # Two boxes with high overlap, different scores
-        boxes = mx.array([[100, 100, 50, 50],   # center, high score
-                          [105, 105, 50, 50]])   # nearby, lower score
+        boxes = mx.array([[100, 100, 50, 50], [105, 105, 50, 50]])
         scores = mx.array([0.9, 0.7])
         keep = _nms_mlx(boxes, scores, iou_threshold=0.5)
-        assert keep == [0]  # only the higher-scoring box survives
+        assert keep == [0]
 
-    def test_nms_keeps_non_overlapping(self):
+    def test_keeps_non_overlapping_in_score_order(self):
         from wilor_mlx.pipeline import _nms_mlx
 
-        boxes = mx.array([[50, 50, 30, 30],
-                          [200, 200, 30, 30]])
+        boxes = mx.array([[50, 50, 30, 30], [200, 200, 30, 30]])
         scores = mx.array([0.8, 0.9])
         keep = _nms_mlx(boxes, scores, iou_threshold=0.5)
-        assert len(keep) == 2
+        assert keep == [1, 0]  # highest score first
 
-    def test_nms_empty(self):
+    def test_empty(self):
         from wilor_mlx.pipeline import _nms_mlx
 
-        keep = _nms_mlx(mx.zeros((0, 4)), mx.zeros((0,)), 0.5)
-        assert keep == []
+        assert _nms_mlx(mx.zeros((0, 4)), mx.zeros((0,)), 0.5) == []
+
+
+# ---------------------------------------------------------------------------
+# 6. Pipeline: crop and resize
+# ---------------------------------------------------------------------------
 
 
 class TestCropAndResize:
-    """Verify MLX bilinear crop-and-resize."""
-
     def test_output_shape(self):
         from wilor_mlx.pipeline import _crop_and_resize_mlx
 
-        img = mx.zeros((100, 200, 3), dtype=mx.uint8)
+        img = mx.ones((100, 200, 3), dtype=mx.uint8)
         out = _crop_and_resize_mlx(img, 100.0, 50.0, 80.0, target_size=64)
         assert out.shape == (64, 64, 3)
 
-    def test_center_crop_bilinear(self):
-        """Cropping the center of a gradient image produces interpolated values in range."""
+    def test_not_constant(self):
+        """Bilinear crop of varied input produces non-constant output."""
         from wilor_mlx.pipeline import _crop_and_resize_mlx
 
-        img_np = np.zeros((64, 64, 3), dtype=np.uint8)
-        for c in range(3):
-            img_np[:, :, c] = np.outer(
-                np.linspace(0, 255, 64), np.linspace(0, 255, 64)
-            ).astype(np.uint8)
-        img = mx.array(img_np)
-        # Crop center half
+        np.random.seed(99)
+        img = mx.array(np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8))
         out = _crop_and_resize_mlx(img, 32.0, 32.0, 32.0, target_size=32)
         mx.eval(out)
+        out_np = np.array(out).astype(float)
+        assert out_np.std() > 20, f"Output std {out_np.std():.1f} too low — may be constant"
+
+    def test_pad_value_fills_oob(self):
+        """Out-of-bounds pixels use pad_value, not edge clamp."""
+        from wilor_mlx.pipeline import _crop_and_resize_mlx
+
+        img = mx.full((10, 10, 3), 200, dtype=mx.uint8)
+        # Crop centered at (5, 5) but box_size=30 extends well beyond 10x10
+        out = _crop_and_resize_mlx(img, 5.0, 5.0, 30.0, target_size=16, pad_value=114)
+        mx.eval(out)
         out_np = np.array(out)
-        # Center crop should produce mid-range values, not extremes
-        assert out_np.min() > 15, f"Center crop min {out_np.min()} too low"
-        assert out_np.max() < 240, f"Center crop max {out_np.max()} too high"
-        assert 90 < out_np.mean() < 165, f"Center crop mean {out_np.mean():.0f} out of range"
+        # Corners should be pad value (114), center should be image value (200)
+        assert out_np[0, 0, 0] == 114, f"Corner should be pad 114, got {out_np[0, 0, 0]}"
+        assert out_np[8, 8, 0] == 200, f"Center should be image 200, got {out_np[8, 8, 0]}"
 
     def test_non_square_source(self):
-        """Crop from a non-square image works."""
         from wilor_mlx.pipeline import _crop_and_resize_mlx
 
         img = mx.array(np.random.randint(0, 255, (200, 400, 3), dtype=np.uint8))
@@ -261,38 +237,112 @@ class TestCropAndResize:
         assert out.shape == (128, 128, 3)
 
 
-class TestPipelineCoordinates:
-    """Verify pipeline coordinate transform for non-square images."""
+# ---------------------------------------------------------------------------
+# 7. Pipeline: mocked end-to-end
+# ---------------------------------------------------------------------------
 
-    def test_square_image_no_offset(self):
-        """For square images, detector-to-original is a simple scale."""
-        H, W = 512, 512
-        img_size = max(H, W)
-        scale = img_size / 512.0
-        ox = (img_size - W) / 2.0
-        oy = (img_size - H) / 2.0
-        assert scale == 1.0
-        assert ox == 0.0
-        assert oy == 0.0
 
-    def test_landscape_image_has_x_offset(self):
-        """Landscape image: shorter height is padded, x has no offset."""
-        H, W = 300, 500
-        img_size = max(H, W)
-        scale = img_size / 512.0
-        ox = (img_size - W) / 2.0
-        oy = (img_size - H) / 2.0
-        assert scale == pytest.approx(500.0 / 512.0)
-        assert ox == 0.0
-        assert oy == 100.0  # (500 - 300) / 2
+class TestPipelineMocked:
+    """Test pipeline with mocked detector and pose model."""
 
-    def test_portrait_image_has_y_offset(self):
-        """Portrait image: shorter width is padded, y has no offset."""
-        H, W = 500, 300
-        img_size = max(H, W)
-        scale = img_size / 512.0
-        ox = (img_size - W) / 2.0
-        oy = (img_size - H) / 2.0
-        assert scale == pytest.approx(500.0 / 512.0)
-        assert ox == 100.0
-        assert oy == 0.0
+    def _make_mock_detector_output(self, cx, cy, w, h, cls_idx, conf, img_size=512):
+        """Create a fake detector output tensor with one detection."""
+        A = 5376
+        pred = np.zeros((69, A), dtype=np.float32)
+        # Put one strong detection at anchor 0
+        pred[0, 0] = cx  # bbox cx
+        pred[1, 0] = cy  # bbox cy
+        pred[2, 0] = w   # bbox w
+        pred[3, 0] = h   # bbox h
+        # Class scores (pre-sigmoid in detector, but output is post-sigmoid)
+        pred[4 + cls_idx, 0] = conf
+        # Keypoints: put them near the box center
+        for j in range(21):
+            pred[6 + j * 3, 0] = cx + (j - 10) * 2  # x
+            pred[7 + j * 3, 0] = cy + (j - 10) * 2  # y
+            pred[8 + j * 3, 0] = 0.9  # visibility
+        return mx.array(pred[np.newaxis])  # (1, 69, A)
+
+    def test_pipeline_returns_hand_pose(self):
+        from wilor_mlx.pipeline import HandPosePipeline
+
+        mock_det = MagicMock()
+        mock_det.return_value = self._make_mock_detector_output(
+            256, 256, 100, 100, cls_idx=1, conf=0.9
+        )
+
+        mock_wilor = MagicMock()
+        mock_wilor.return_value = {
+            "pred_keypoints_3d": mx.zeros((1, 21, 3)),
+            "pred_vertices": mx.zeros((1, 778, 3)),
+        }
+
+        pipeline = HandPosePipeline(mock_det, mock_wilor)
+        image = np.full((512, 512, 3), 128, dtype=np.uint8)
+        hands = pipeline(image, conf_threshold=0.5, include_3d=True)
+
+        assert len(hands) == 1
+        h = hands[0]
+        assert h.hand_side == "right"
+        assert h.confidence == pytest.approx(0.9, abs=0.01)
+        assert len(h.keypoints_2d) == 21
+        assert h.keypoints_3d is not None
+        assert len(h.keypoints_3d) == 21
+
+    def test_pipeline_no_detections(self):
+        from wilor_mlx.pipeline import HandPosePipeline
+
+        mock_det = MagicMock()
+        mock_det.return_value = mx.zeros((1, 69, 5376))  # all zeros = no confident detections
+
+        pipeline = HandPosePipeline(mock_det, MagicMock())
+        hands = pipeline(np.zeros((480, 640, 3), dtype=np.uint8), conf_threshold=0.3)
+        assert hands == []
+
+    def test_pipeline_non_square_coordinate_scaling(self):
+        """Detections on non-square images have correct coordinate offset."""
+        from wilor_mlx.pipeline import HandPosePipeline
+
+        # Detection at center of 512x512 detector space
+        mock_det = MagicMock()
+        mock_det.return_value = self._make_mock_detector_output(
+            256, 256, 80, 80, cls_idx=1, conf=0.8
+        )
+
+        pipeline = HandPosePipeline(mock_det, MagicMock())
+        # 300x500 image: max=500, scale=500/512, ox=0, oy=100
+        hands = pipeline(
+            np.zeros((300, 500, 3), dtype=np.uint8),
+            conf_threshold=0.3, include_3d=False,
+        )
+        assert len(hands) == 1
+        h = hands[0]
+        # Center of detection should map to ~(250 - 0, 250 - 100) = (250, 150)
+        bbox_cx = (h.bbox[0] + h.bbox[2]) / 2
+        bbox_cy = (h.bbox[1] + h.bbox[3]) / 2
+        assert 220 < bbox_cx < 280, f"bbox cx {bbox_cx:.0f} not near 250"
+        assert 120 < bbox_cy < 180, f"bbox cy {bbox_cy:.0f} not near 150"
+
+    def test_pipeline_left_hand_detected(self):
+        from wilor_mlx.pipeline import HandPosePipeline
+
+        mock_det = MagicMock()
+        mock_det.return_value = self._make_mock_detector_output(
+            256, 256, 100, 100, cls_idx=0, conf=0.85  # cls 0 = left
+        )
+
+        mock_wilor = MagicMock()
+        mock_wilor.return_value = {
+            "pred_keypoints_3d": mx.ones((1, 21, 3)),
+            "pred_vertices": mx.ones((1, 778, 3)),
+        }
+
+        pipeline = HandPosePipeline(mock_det, mock_wilor)
+        hands = pipeline(
+            np.zeros((512, 512, 3), dtype=np.uint8),
+            include_3d=True, conf_threshold=0.5,
+        )
+        assert len(hands) == 1
+        assert hands[0].hand_side == "left"
+        # 3D keypoints x should be negated for left hand flip-back
+        assert hands[0].keypoints_3d[0][0] == pytest.approx(-1.0)

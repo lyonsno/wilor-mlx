@@ -150,11 +150,7 @@ class Pose(nn.Module):
         self.stride = mx.array([8.0, 16.0, 32.0])
 
         c2 = max(64, ch[0] // 4)  # bbox branch channels
-        c3 = max(nc, ch[0])  # class branch channels (at least nc)
-        # Actually c3 for YOLOv8m-pose is max(nc, min(ch))
-        # From inspection: cv3[0] in_ch is 192, so c3 = 192
-        c3 = max(nc, min(ch))
-        c4 = max(nk, ch[0])  # kpt branch — actually just nk output
+        c3 = max(nc, min(ch))  # class branch channels
 
         # Bbox regression heads (per FPN level)
         self.cv2 = [
