@@ -2,7 +2,7 @@
 
 WiLoR hand pose estimation for Apple Silicon, rebuilt end-to-end in [MLX](https://github.com/ml-explore/mlx).
 
-A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — the pose/reconstruction model including ViT backbone, MANO hand model, and RefineNet refinement stage. It expects a cropped hand image from a separate detector. First run requires `torch` for a one-time MANO conversion; after that, inference runs purely on MLX.
+A from-scratch MLX port of [WiLoR-mini](https://github.com/warmshao/WiLoR-mini) (Zhan et al., "WiLoR: End-to-end 3D hand localization and reconstruction in-the-wild") — complete pipeline from full image to 3D hand pose. Includes both the YOLOv8m-pose hand detector and the WiLoR pose/reconstruction model (ViT backbone, MANO hand model, RefineNet). After first-run setup, the entire pipeline runs purely on MLX with no PyTorch dependency.
 
 ## Performance
 
@@ -51,11 +51,12 @@ Requires macOS with Apple Silicon, Python 3.10+. MLX and other dependencies inst
 
 ## How it works
 
-On the first call to `WiLoR.from_pretrained()`, wilor-mlx automatically:
+On the first call to `HandPosePipeline.from_pretrained()`, wilor-mlx automatically:
 
-1. Downloads model weights from [HuggingFace](https://huggingface.co/BasinShapers/wilor-mlx) (2.4 GB, cached locally)
-2. Downloads MANO hand model data from the [WiLoR-mini](https://huggingface.co/warmshao/WiLoR-mini) checkpoint (requires `torch` for one-time conversion)
-3. Caches converted MANO data at `~/.cache/wilor-mlx/mano.npz`
+1. Downloads hand detector weights from [HuggingFace](https://huggingface.co/BasinShapers/wilor-mlx) (107 MB, cached locally)
+2. Downloads WiLoR pose model weights (2.4 GB, cached locally)
+3. Downloads MANO hand model data from the [WiLoR-mini](https://huggingface.co/warmshao/WiLoR-mini) checkpoint (requires `torch` for one-time conversion)
+4. Caches converted MANO data at `~/.cache/wilor-mlx/mano.npz`
 
 After the first run, everything loads from cache and **torch is never used again.**
 
@@ -68,37 +69,76 @@ If you prefer to supply your own MANO data (e.g. obtained directly from [MPI](ht
 ## Quick start
 
 ```python
+from wilor_mlx import HandPosePipeline
+import numpy as np
+
+# Load pipeline — detector + pose model download and cache automatically
+pipeline = HandPosePipeline.from_pretrained()
+
+# Run on any image — detection + 3D pose in one call
+image = np.array(...)  # (H, W, 3) uint8 RGB
+hands = pipeline(image)
+
+for hand in hands:
+    print(hand.hand_side)     # "left" or "right"
+    print(hand.confidence)    # detection confidence
+    print(hand.bbox)          # [x1, y1, x2, y2] in pixel coords
+    print(hand.keypoints_2d)  # 21 keypoints from detector
+    print(hand.keypoints_3d)  # 21 keypoints from WiLoR (3D)
+```
+
+The pipeline accepts numpy arrays or MLX arrays. All models download from [HuggingFace](https://huggingface.co/BasinShapers/wilor-mlx) on first use and cache locally.
+
+### Pipeline output
+
+Each detected hand is a `HandPose` with:
+
+| Field | Type | Description |
+|---|---|---|
+| `hand_side` | `str` | `"left"` or `"right"` |
+| `confidence` | `float` | Detection confidence (0–1) |
+| `bbox` | `list[float]` | `[x1, y1, x2, y2]` in pixel coords |
+| `keypoints_2d` | `list[list[float]]` | 21 keypoints `[x, y]` from detector |
+| `keypoints_3d` | `list[list[float]]` or `None` | 21 keypoints `[x, y, z]` from WiLoR |
+| `vertices` | `list[list[float]]` or `None` | 778 MANO mesh vertices |
+
+### Options
+
+```python
+hands = pipeline(
+    image,
+    conf_threshold=0.3,      # detection confidence threshold
+    iou_threshold=0.5,       # NMS IoU threshold
+    include_3d=True,         # run WiLoR for 3D keypoints (default True)
+    include_vertices=False,  # include MANO mesh vertices
+)
+```
+
+### Lower-level API
+
+For pre-cropped hand images or custom detection pipelines, the `WiLoR` model is available directly:
+
+```python
 from wilor_mlx import WiLoR
 import mlx.core as mx
 import numpy as np
 
-# Load model — everything downloads and caches automatically
 model = WiLoR.from_pretrained()
 
-# Prepare input: a 256x256 RGB hand crop as uint8
-# WiLoR expects a tightly cropped hand image, typically from a hand detector
-image = np.random.randint(0, 256, (1, 256, 256, 3), dtype=np.uint8)  # replace with real image
-image_mlx = mx.array(image)
-
-# Run inference
-result = model(image_mlx)
+# Input: 256x256 RGB hand crop, uint8 NHWC
+crop = mx.array(np.random.randint(0, 256, (1, 256, 256, 3), dtype=np.uint8))
+result = model(crop)
 mx.eval(result)
 
-# Outputs
-keypoints_3d = np.array(result['pred_keypoints_3d'])  # (1, 21, 3) — 21 hand keypoints in 3D
-vertices = np.array(result['pred_vertices'])            # (1, 778, 3) — MANO mesh vertices
-camera = np.array(result['pred_cam'])                   # (1, 3) — weak-perspective camera [s, tx, ty]
+keypoints_3d = np.array(result['pred_keypoints_3d'])  # (1, 21, 3)
+vertices = np.array(result['pred_vertices'])            # (1, 778, 3)
 ```
 
-### Input format
-
-The model expects a **256×256 RGB crop of a hand**, as a `(B, 256, 256, 3)` uint8 MLX array in NHWC layout. The model handles normalization internally (ImageNet mean/std). In a typical pipeline, a hand detector (like YOLO) first finds the hand bounding box in a full frame, then the crop is resized to 256×256 and passed to WiLoR for 3D pose estimation.
-
-### Output format
+#### WiLoR output format
 
 | Key | Shape | Description |
 |---|---|---|
-| `pred_keypoints_3d` | (B, 21, 3) | 3D hand joint locations (OpenPose ordering) |
+| `pred_keypoints_3d` | (B, 21, 3) | 3D hand joint locations |
 | `pred_vertices` | (B, 778, 3) | MANO mesh vertex positions |
 | `pred_cam` | (B, 3) | Weak-perspective camera `[scale, tx, ty]` |
 | `global_orient` | (B, 1, 3) | Global wrist rotation (axis-angle) |
@@ -120,12 +160,16 @@ The geometric outputs that matter for hand tracking (vertices, keypoints) match 
 
 ## Architecture
 
-The port includes:
+The pipeline consists of two MLX models:
 
+**Hand Detector** (26.6M params) — YOLOv8m-pose trained on hand detection with left/right classification and 21-keypoint prediction. Backbone: Conv+BN+SiLU, C2f CSP blocks, SPPF. FPN neck with 3 detection scales. Produces bounding boxes, hand side, confidence, and 2D keypoints.
+
+**WiLoR Pose Model** (632M params) — 3D hand pose estimation from cropped hand images:
 - **ViT-H/16 backbone** — 1280 embed dim, 32 transformer layers, 16 heads. Processes 192 image patches + 18 learnable tokens (pose/shape/camera).
 - **MANO hand model** — differentiable hand mesh with Linear Blend Skinning, Rodrigues rotations, and kinematic chain. 778 vertices, 16 joints.
 - **RefineNet** — multi-scale deconvolution pyramid that samples ViT features at projected vertex locations via bilinear grid sampling, then refines the initial MANO parameter estimates.
-- **Weight converter** — loads PyTorch `.ckpt` files, handles Conv2d NCHW→NHWC transposition, ConvTranspose2d weight layout, and BatchNorm parameter mapping.
+
+Both models are ported op-for-op from PyTorch to MLX with sub-pixel numerical parity (max diff < 0.001 for detector, < 0.006 for pose model).
 
 ## License
 
