@@ -205,7 +205,6 @@ class WiLoR:
             )
 
         from huggingface_hub import hf_hub_download
-        import numpy as np
 
         # Download from WiLoR-mini's HuggingFace repo
         ckpt_path = hf_hub_download(

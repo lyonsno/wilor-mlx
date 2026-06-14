@@ -103,6 +103,23 @@ class TestWeightLoading:
         assert out.shape == (1, 69, 5376)
 
 
+class TestManoCache:
+    """Verify MANO cache handling without network or torch side effects."""
+
+    def test_cached_mano_with_faces_returns_without_reconversion(self, tmp_path, monkeypatch):
+        """v0.3 cached MANO data already has faces; the fast path must not require torch."""
+
+        from wilor_mlx.model import WiLoR
+
+        cache_dir = tmp_path / ".cache" / "wilor-mlx"
+        cache_dir.mkdir(parents=True)
+        cached_mano = cache_dir / WiLoR.MANO_CACHE_FILE
+        np.savez(cached_mano, faces=np.array([[0, 1, 2]], dtype=np.int32))
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        assert WiLoR._ensure_mano() == str(cached_mano)
+
+
 # ---------------------------------------------------------------------------
 # 4. Numerical parity with PyTorch reference
 # ---------------------------------------------------------------------------
