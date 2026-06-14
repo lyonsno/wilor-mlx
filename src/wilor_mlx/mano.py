@@ -204,6 +204,7 @@ class MANO:
         self.J_regressor = None     # (16, 778)
         self.parents = None         # (16,) int
         self.lbs_weights = None     # (778, 16)
+        self.faces = None           # (1538, 3) int32 — triangle vertex indices
 
         # Extra joints
         self.joint_regressor_extra = None

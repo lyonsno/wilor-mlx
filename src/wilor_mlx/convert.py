@@ -134,6 +134,7 @@ def load_pytorch_checkpoint(model, ckpt_path, mano_model_path, mano_mean_path):
     mano.lbs_weights = _t(sd['mano.lbs_weights'])
     mano.extra_joints_idxs = _t_int(sd['mano.extra_joints_idxs'])
     mano.joint_map = _t_int(sd['mano.joint_map'])
+    mano.faces = _t_int(sd['mano.faces_tensor'])
 
     # Load mean params
     mean_params = np.load(mano_mean_path)
@@ -219,6 +220,8 @@ def load_mano_from_pkl(mano, pkl_path):
     mano.J_regressor = mx.array(np.array(J_reg.toarray() if hasattr(J_reg, 'toarray') else J_reg, dtype=np.float32))
     mano.parents = mx.array(mano_data['kintree_table'][0].astype(np.int32))
     mano.lbs_weights = mx.array(to_np(mano_data['weights']).astype(np.float32))
+    faces_raw = to_np(mano_data['f']).astype(np.int32)
+    mano.faces = mx.array(faces_raw)
 
     # Extra joint vertex indices (from smplx.vertex_ids['mano'])
     mano.extra_joints_idxs = mx.array(np.array([744, 320, 443, 554, 671], dtype=np.int32))
@@ -229,7 +232,7 @@ def load_mano_from_pkl(mano, pkl_path):
 
     arrays = [v for v in [mano.v_template, mano.shapedirs, mano.posedirs,
               mano.J_regressor, mano.parents, mano.lbs_weights,
-              mano.extra_joints_idxs, mano.joint_map] if isinstance(v, mx.array)]
+              mano.faces, mano.extra_joints_idxs, mano.joint_map] if isinstance(v, mx.array)]
     mx.eval(*arrays)
 
 
@@ -437,6 +440,7 @@ def save_mano_npz(model, output_path):
         'J_regressor': np.array(mano.J_regressor),
         'parents': np.array(mano.parents),
         'lbs_weights': np.array(mano.lbs_weights),
+        'faces': np.array(mano.faces),
         'extra_joints_idxs': np.array(mano.extra_joints_idxs),
         'joint_map': np.array(mano.joint_map),
     }
@@ -458,6 +462,8 @@ def load_mano_npz(model, npz_path):
     mano.lbs_weights = mx.array(data['lbs_weights'])
     mano.extra_joints_idxs = mx.array(data['extra_joints_idxs'].astype(np.int32))
     mano.joint_map = mx.array(data['joint_map'].astype(np.int32))
+    if 'faces' in data:
+        mano.faces = mx.array(data['faces'].astype(np.int32))
     # Init params (if present — auto-convert includes these)
     if 'init_hand_pose' in data:
         model.backbone.init_hand_pose = mx.array(data['init_hand_pose'].reshape(1, -1))

@@ -75,8 +75,8 @@ class WiLoR:
         Args:
             x: (B, 256, 256, 3) uint8 image in NHWC RGB format
         Returns:
-            dict with pred_keypoints_3d, pred_vertices, global_orient, hand_pose,
-            betas, pred_cam — all as MLX arrays
+            dict with pred_keypoints_3d, pred_vertices, faces, global_orient,
+            hand_pose, betas, pred_cam — all as MLX arrays
         """
         # Normalize (ImageNet mean/std, RGB order)
         x = x.astype(mx.float32) / 255.0
@@ -116,6 +116,7 @@ class WiLoR:
         # Convert rotmats to rotvecs for output
         pred_mano_params['pred_keypoints_3d'] = pred_keypoints_3d.reshape(batch_size, -1, 3)
         pred_mano_params['pred_vertices'] = pred_vertices.reshape(batch_size, -1, 3)
+        pred_mano_params['faces'] = self.mano.faces
         pred_mano_params['global_orient'] = rotmat_to_rotvec(pred_mano_params['global_orient'])
         pred_mano_params['hand_pose'] = rotmat_to_rotvec(pred_mano_params['hand_pose'])
 
@@ -174,6 +175,7 @@ class WiLoR:
     def _ensure_mano():
         """Ensure MANO data is available, converting from WiLoR-mini checkpoint if needed."""
         import os
+        import numpy as np
 
         # Check for cached mano.npz next to the weights
         cache_dir = os.path.join(
@@ -182,7 +184,11 @@ class WiLoR:
         mano_npz_path = os.path.join(cache_dir, WiLoR.MANO_CACHE_FILE)
 
         if os.path.exists(mano_npz_path):
-            return mano_npz_path
+            # Regenerate if cached file is missing faces (pre-v0.3.0)
+            data = np.load(mano_npz_path)
+            if 'faces' in data:
+                return mano_npz_path
+            print("Cached mano.npz is missing faces, regenerating...")
 
         # Need to convert — download WiLoR-mini files and extract MANO
         print("First run: converting MANO data from WiLoR-mini checkpoint (requires torch)...")
@@ -224,6 +230,7 @@ class WiLoR:
             "lbs_weights": sd["mano.lbs_weights"].numpy().astype(np.float32),
             "extra_joints_idxs": sd["mano.extra_joints_idxs"].numpy().astype(np.int32),
             "joint_map": sd["mano.joint_map"].numpy().astype(np.int32),
+            "faces": sd["mano.faces_tensor"].numpy().astype(np.int32),
         }
 
         # Save init params too
