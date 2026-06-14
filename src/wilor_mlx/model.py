@@ -75,8 +75,10 @@ class WiLoR:
         Args:
             x: (B, 256, 256, 3) uint8 image in NHWC RGB format
         Returns:
-            dict with pred_keypoints_3d, pred_vertices, faces, global_orient,
-            hand_pose, betas, pred_cam — all as MLX arrays
+            dict with pred_keypoints_3d, pred_vertices, global_orient,
+            hand_pose, betas, pred_cam as MLX arrays (batched).
+            faces: (1538, 3) int32 triangle indices (unbatched, static topology)
+            — present only when MANO faces are loaded.
         """
         # Normalize (ImageNet mean/std, RGB order)
         x = x.astype(mx.float32) / 255.0
@@ -116,7 +118,8 @@ class WiLoR:
         # Convert rotmats to rotvecs for output
         pred_mano_params['pred_keypoints_3d'] = pred_keypoints_3d.reshape(batch_size, -1, 3)
         pred_mano_params['pred_vertices'] = pred_vertices.reshape(batch_size, -1, 3)
-        pred_mano_params['faces'] = self.mano.faces
+        if self.mano.faces is not None:
+            pred_mano_params['faces'] = self.mano.faces
         pred_mano_params['global_orient'] = rotmat_to_rotvec(pred_mano_params['global_orient'])
         pred_mano_params['hand_pose'] = rotmat_to_rotvec(pred_mano_params['hand_pose'])
 
@@ -175,7 +178,6 @@ class WiLoR:
     def _ensure_mano():
         """Ensure MANO data is available, converting from WiLoR-mini checkpoint if needed."""
         import os
-        import numpy as np
 
         # Check for cached mano.npz next to the weights
         cache_dir = os.path.join(

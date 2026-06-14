@@ -440,10 +440,11 @@ def save_mano_npz(model, output_path):
         'J_regressor': np.array(mano.J_regressor),
         'parents': np.array(mano.parents),
         'lbs_weights': np.array(mano.lbs_weights),
-        'faces': np.array(mano.faces),
         'extra_joints_idxs': np.array(mano.extra_joints_idxs),
         'joint_map': np.array(mano.joint_map),
     }
+    if mano.faces is not None:
+        mano_arrays['faces'] = np.array(mano.faces)
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     np.savez(output_path, **mano_arrays)
     total_kb = sum(v.nbytes for v in mano_arrays.values()) / 1024
