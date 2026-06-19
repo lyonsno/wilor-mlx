@@ -103,6 +103,18 @@ class TestWeightLoading:
         assert out.shape == (1, 69, 5376)
 
 
+def test_wilor_cached_mano_npz_returns_without_local_numpy_shadow(tmp_path, monkeypatch):
+    from wilor_mlx.model import WiLoR
+
+    cache_dir = tmp_path / ".cache" / "wilor-mlx"
+    cache_dir.mkdir(parents=True)
+    mano_path = cache_dir / WiLoR.MANO_CACHE_FILE
+    np.savez(mano_path, faces=np.array([[0, 1, 2]], dtype=np.int32))
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    assert WiLoR._ensure_mano() == str(mano_path)
+
+
 # ---------------------------------------------------------------------------
 # 4. Numerical parity with PyTorch reference
 # ---------------------------------------------------------------------------
