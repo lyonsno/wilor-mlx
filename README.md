@@ -151,12 +151,12 @@ Compared against PyTorch WiLoR-mini on identical inputs (float32):
 
 | Output | Max abs diff | Notes |
 |---|---|---|
-| pred_vertices (778×3) | 0.006 | Sub-millimeter |
-| pred_keypoints_3d (21×3) | 0.006 | Sub-millimeter |
+| pred_vertices (778×3) | 0.006 | MANO model coordinates |
+| pred_keypoints_3d (21×3) | 0.006 | MANO model coordinates |
 | hand_pose (15×3) | 0.06 | Axis-angle is sensitive near gimbal lock |
 | betas (10) | 0.10 | Accumulates through 32 transformer layers |
 
-The geometric outputs that matter for hand tracking (vertices, keypoints) match within sub-millimeter precision.
+The geometric outputs that matter for hand tracking (vertices, keypoints) match within 0.006 maximum absolute difference in MANO model coordinates.
 
 ## Architecture
 
@@ -169,7 +169,7 @@ The pipeline consists of two MLX models:
 - **MANO hand model** — differentiable hand mesh with Linear Blend Skinning, Rodrigues rotations, and kinematic chain. 778 vertices, 16 joints.
 - **RefineNet** — multi-scale deconvolution pyramid that samples ViT features at projected vertex locations via bilinear grid sampling, then refines the initial MANO parameter estimates.
 
-Both models are ported op-for-op from PyTorch to MLX with sub-pixel numerical parity (max diff < 0.001 for detector, < 0.006 for pose model).
+Both models are ported op-for-op from PyTorch to MLX; fixed-input comparisons measured maximum absolute differences below 0.001 for the detector and 0.006 for the pose model.
 
 ## License
 
