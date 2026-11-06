@@ -176,3 +176,17 @@ Both models are ported op-for-op from PyTorch to MLX; fixed-input comparisons me
 The wilor-mlx code and distributed weight files are MIT licensed. Our weights (on [HuggingFace](https://huggingface.co/BasinShapers/wilor-mlx)) contain only ViT backbone, RefineNet, and learned embedding parameters — no MANO data is bundled or rehosted.
 
 The [MANO hand model](https://mano.is.tue.mpg.de/) is separately licensed by the Max Planck Institute. `WiLoR.from_pretrained()` fetches upstream [WiLoR-mini](https://huggingface.co/warmshao/WiLoR-mini) assets and converts MANO data locally on your machine. If you prefer to obtain MANO directly from MPI, pass `mano_path=...` to use your own copy.
+
+### Retaining native camera placement
+
+`HandPose.camera` retains the pose model's raw camera parameters, source image
+size, effective crop center/size, focal convention, and full-image translation
+computed using WiLoR's upstream `cam_crop_to_full` convention. Left-hand camera
+and mesh X reflections are recorded. These intrinsics follow the model's focal
+convention; they are not a physical camera calibration.
+
+`HandPose.model_keypoints_2d` contains the pose projection in source-image pixels.
+The existing `keypoints_2d` remains the detector's landmarks. Both fields survive
+`dataclasses.asdict(hand)` and JSON recording. Detector-only results have no pose
+camera. An invalid predicted camera is marked unavailable with its raw prediction
+retained; it is never replaced with a landmark fit.

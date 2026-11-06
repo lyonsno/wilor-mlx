@@ -25,6 +25,8 @@ class HandPose:
     keypoints_2d: list[list[float]]  # 21 keypoints from detector, each [x, y]
     keypoints_3d: list[list[float]] | None = None  # 21 keypoints from WiLoR
     vertices: list[list[float]] | None = None  # 778 MANO mesh vertices
+    camera: dict | None = None  # Native prediction and upstream full-image projection
+    model_keypoints_2d: list[list[float]] | None = None  # Pose projection, distinct from detector
 
 
 def _nms_mlx(boxes, scores, iou_threshold: float = 0.5):
@@ -239,6 +241,8 @@ class HandPosePipeline:
 
             kp3d = None
             verts = None
+            camera = None
+            model_kp2d = None
 
             if include_3d or include_vertices:
                 # Crop hand in original image coords
@@ -252,6 +256,39 @@ class HandPosePipeline:
 
                 wilor_out = self.pose_model(crop[None])
                 mx.eval(wilor_out)
+
+                # Preserve the camera head that was previously lost at this wrapper.
+                # Formula and left-hand correction follow upstream demo.py and
+                # wilor/utils/renderer.py::cam_crop_to_full.
+                raw_cam = np.array(wilor_out["pred_cam"][0], dtype=float)
+                focal = float(self.pose_model.FOCAL_LENGTH)
+                camera = dict(schema="wilor.native-camera.v1", status="unavailable",
+                              rawPredCam=raw_cam.tolist(), imageSize=[int(W), int(H)],
+                              cropCenter=[float(cx_o), float(cy_o)], cropSize=float(box_size),
+                              modelImageSize=256, modelFocalLength=focal,
+                              basis="opencv_x_right_y_down_z_forward",
+                              method="WiLoR upstream cam_crop_to_full; native camera head",
+                              intrinsicsAuthority="model focal convention; not physical calibration",
+                              handednessTransform="reflect mesh X and camera tx" if hand_side == "left" else "identity")
+                if raw_cam.shape == (3,) and np.isfinite(raw_cam).all() and raw_cam[0] > 0:
+                    full_focal = focal / 256.0 * max(H, W)
+                    cam = raw_cam.copy()
+                    if hand_side == "left":
+                        cam[1] *= -1
+                    bs = box_size * cam[0] + 1e-9
+                    translation = np.array([2 * (cx_o - W / 2) / bs + cam[1],
+                                            2 * (cy_o - H / 2) / bs + cam[2],
+                                            2 * full_focal / bs])
+                    camera.update(status="observed", translation=translation.tolist(),
+                                  intrinsics=[full_focal, full_focal, W / 2, H / 2])
+                    joints = np.array(wilor_out["pred_keypoints_3d"][0], dtype=float)
+                    if hand_side == "left":
+                        joints[:, 0] *= -1
+                    points = joints + translation
+                    if np.isfinite(points).all() and (points[:, 2] > 0).all():
+                        model_kp2d = (points[:, :2] / points[:, 2:] * full_focal + [W / 2, H / 2]).tolist()
+                else:
+                    camera["reason"] = "invalid_native_camera_scale_or_values"
 
                 if include_3d:
                     kp3d_arr = np.array(wilor_out["pred_keypoints_3d"][0])
@@ -272,6 +309,8 @@ class HandPosePipeline:
                 keypoints_2d=kp2d,
                 keypoints_3d=kp3d,
                 vertices=verts,
+                camera=camera,
+                model_keypoints_2d=model_kp2d,
             ))
 
         return results
