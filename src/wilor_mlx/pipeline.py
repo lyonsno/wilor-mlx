@@ -260,10 +260,18 @@ class HandPosePipeline:
                 # Preserve the camera head that was previously lost at this wrapper.
                 # Formula and left-hand correction follow upstream demo.py and
                 # wilor/utils/renderer.py::cam_crop_to_full.
-                raw_cam = np.array(wilor_out["pred_cam"][0], dtype=float)
+                raw_native = np.array(wilor_out["pred_cam"][0])
+                raw_cam = raw_native.astype(float)
+                # JSON has no NaN/Inf numbers. Keep exact native bytes (including
+                # NaN payloads), with readable tokens for non-finite components.
+                raw_values = [float(v) if np.isfinite(v) else
+                              "NaN" if np.isnan(v) else "+Infinity" if v > 0 else "-Infinity"
+                              for v in raw_cam.reshape(-1)]
                 focal = float(self.pose_model.FOCAL_LENGTH)
                 camera = dict(schema="wilor.native-camera.v1", status="unavailable",
-                              rawPredCam=raw_cam.tolist(), imageSize=[int(W), int(H)],
+                              rawPredCam=raw_values, rawPredCamDtype=raw_native.dtype.str,
+                              rawPredCamShape=list(raw_native.shape),
+                              rawPredCamBytesHex=raw_native.tobytes().hex(), imageSize=[int(W), int(H)],
                               cropCenter=[float(cx_o), float(cy_o)], cropSize=float(box_size),
                               modelImageSize=256, modelFocalLength=focal,
                               basis="opencv_x_right_y_down_z_forward",

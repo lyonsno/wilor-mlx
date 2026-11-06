@@ -8,7 +8,8 @@ import pytest
 from wilor_mlx.pipeline import HandPosePipeline
 
 @pytest.mark.parametrize('side',['left','right'])
-def test_pipeline_retains_camera_and_model_projection(side):
+@pytest.mark.parametrize('camera_scale',[2.,float('nan'),float('inf'),-float('inf')])
+def test_pipeline_retains_camera_and_model_projection(side,camera_scale):
     class Detector:
         def __call__(self, image):
             raw=np.zeros((1,69,1),dtype=np.float32)
@@ -19,12 +20,19 @@ def test_pipeline_retains_camera_and_model_projection(side):
     class Pose:
         FOCAL_LENGTH=5000.
         def __call__(self,image):
-            return {'pred_cam':mx.array([[2.,.04,-.02]]),
+            return {'pred_cam':mx.array([[camera_scale,.04,-.02]]),
                     'pred_keypoints_3d':mx.array(np.tile([.02,.01,.03],(1,21,1))),
                     'pred_vertices':mx.zeros((1,778,3))}
     with patch('wilor_mlx.pipeline._crop_and_resize_mlx',return_value=mx.zeros((2,2,3),dtype=mx.uint8)):
         hands=HandPosePipeline(Detector(),Pose())(np.zeros((480,640,3),dtype=np.uint8),include_vertices=True)
     saved=json.loads(json.dumps(asdict(hands[0]),allow_nan=False))
+    if not np.isfinite(camera_scale):
+        assert saved['camera']['status']=='unavailable'
+        assert saved['model_keypoints_2d'] is None
+        raw=np.frombuffer(bytes.fromhex(saved['camera']['rawPredCamBytesHex']),dtype=saved['camera']['rawPredCamDtype'])
+        assert raw.shape==(3,) and np.isnan(raw[0])==np.isnan(camera_scale)
+        if not np.isnan(camera_scale):assert raw[0]==camera_scale
+        return
     assert saved['camera']['status']=='observed'
     assert saved['camera']['rawPredCam']==pytest.approx([2,.04,-.02])
     assert saved['camera']['imageSize']==[640,480]
